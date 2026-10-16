@@ -37,19 +37,19 @@ document.querySelector('#chat-inquiry').addEventListener('click', () => {
 
 /* ================= EMAIL & FORMSPREE AUTOMATION CONFIG ================= */
 const AUTOMATION_CONFIG = {
-  FORMSPREE_ENDPOINT: 'https://formspree.io/f/xwlpvlgd',
-  OWNER_EMAIL: 'giancastillo@circuitsenshi.ph',
-  // Optional: Paste your free EmailJS keys here if you want direct client-side Gmail dispatch in addition to Formspree
-  EMAILJS_PUBLIC_KEY: 'YOUR_PUBLIC_KEY',
-  EMAILJS_SERVICE_ID: 'YOUR_SERVICE_ID',
-  EMAILJS_TEMPLATE_ID: 'YOUR_TEMPLATE_ID'
+  FORMSPREE_ENDPOINT: 'https://formspree.io/f/xwlpvlgd',[cite: 4, 5]
+  OWNER_EMAIL: 'giancastlo117@gmail.com', // Ang iyong Owner Gmail
+  // Naka-dagdag na ang iyong mga tunay na EmailJS keys:
+  EMAILJS_PUBLIC_KEY: 'T4ns6nIGTXCULdidV',
+  EMAILJS_SERVICE_ID: 'service_f6v7jiz',
+  EMAILJS_TEMPLATE_ID: 'template_twgq1qn'
 };
 
 if (window.emailjs && AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
   window.emailjs.init(AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY);
 }
 
-/* ================= BOOKING STATE MANAGEMENT ================= */
+/* ================= BOOKING STATE & URL ACTION LINKS ================= */
 const STORAGE_KEY = 'circuit_senshi_orders_v1';
 const EMAIL_LOG_KEY = 'circuit_senshi_email_log_v1';
 let activeOrderId = null;
@@ -81,13 +81,25 @@ function showToast(message) {
   toast.textContent = message;
   toast.hidden = false;
   clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => { toast.hidden = true; }, 5500);
+  showToast._timer = setTimeout(() => { toast.hidden = true; }, 6000);
 }
 
-/* Sends automated notifications to both Customer and Owner + logs them on screen */
+/* Lumilikha ng 1-Click Action Links para sa Gmail */
+function buildActionUrl(order, actionType) {
+  const baseUrl = window.location.origin + window.location.pathname;
+  const payload = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(order)))));
+  return `${baseUrl}?order=${encodeURIComponent(order.id)}&action=${encodeURIComponent(actionType)}&data=${payload}#order-portal`;
+}
+
+/* Nagpapadala ng Automated Emails sa Customer at Owner */
 async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, ownerMessage }) {
   const timestamp = new Date().toLocaleString();
   const logs = getEmailLogs();
+
+  const ownerAcceptUrl = buildActionUrl(order, 'owner-accept');
+  const ownerCancelUrl = buildActionUrl(order, 'owner-cancel');
+  const customerPortalUrl = buildActionUrl(order, 'customer-view');
+  const customerCancelUrl = buildActionUrl(order, 'customer-cancel');
 
   logs.unshift({
     time: timestamp,
@@ -100,13 +112,14 @@ async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, own
   localStorage.setItem(EMAIL_LOG_KEY, JSON.stringify(logs.slice(0, 20)));
   renderEmailLogs();
 
-  // 1. Send background notification to Owner's Formspree connected email
+  // 1. Ipadala sa Formspree (Backup Copy para sa Owner)
   try {
     await fetch(AUTOMATION_CONFIG.FORMSPREE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
-        _subject: `[Circuit Senshi Automated] ${eventTitle} (${order.id})`,
+        _subject: `[Circuit Senshi] ${eventTitle} (${order.id})`,
+        _replyto: order.customerEmail,
         orderReference: order.id,
         status: order.status,
         customerName: order.customerName,
@@ -114,15 +127,18 @@ async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, own
         mobile: order.mobile,
         service: order.serviceName,
         amount: `₱${order.price.toFixed(2)}`,
+        CLICK_TO_ACCEPT_REPAIR: ownerAcceptUrl,
+        CLICK_TO_CANCEL_REPAIR: ownerCancelUrl,
+        OPEN_CUSTOMER_PORTAL: customerPortalUrl,
         customerCopySent: customerMessage,
         ownerCopySent: ownerMessage
       })
     });
   } catch (err) {
-    console.warn('Formspree background sync notice:', err);
+    console.warn('Formspree sync notice:', err);
   }
 
-  // 2. If EmailJS is configured, send direct emails to Customer & Owner Gmail
+  // 2. Ipadala sa Tunay na Customer Gmail sa pamamagitan ng EmailJS
   if (window.emailjs && AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
     try {
       await window.emailjs.send(AUTOMATION_CONFIG.EMAILJS_SERVICE_ID, AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID, {
@@ -133,24 +149,27 @@ async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, own
         service_name: order.serviceName,
         amount: `₱${order.price.toFixed(2)}`,
         status: order.status,
-        message_body: customerMessage
+        message_body: `${customerMessage}\n\nCancel Booking Link: ${customerCancelUrl}`,
+        action_link: customerPortalUrl
       });
+
       await window.emailjs.send(AUTOMATION_CONFIG.EMAILJS_SERVICE_ID, AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID, {
         to_email: AUTOMATION_CONFIG.OWNER_EMAIL,
         to_name: 'Circuit Senshi Owner',
-        subject: `[OWNER COPY] ${eventTitle}`,
+        subject: `[OWNER ACTION] ${eventTitle}`,
         order_id: order.id,
         service_name: order.serviceName,
         amount: `₱${order.price.toFixed(2)}`,
         status: order.status,
-        message_body: ownerMessage
+        message_body: `${ownerMessage}\n\n✔ ACCEPT REPAIR LINK:\n${ownerAcceptUrl}\n\n✕ CANCEL SERVICE LINK:\n${ownerCancelUrl}`,
+        action_link: ownerAcceptUrl
       });
     } catch (err) {
-      console.warn('EmailJS notice:', err);
+      console.warn('EmailJS send error:', err);
     }
   }
 
-  showToast(`📧 Automated emails sent to ${order.customerEmail} & Owner (${eventTitle})`);
+  showToast(`📧 Naipadala na ang automated email para sa ${order.id} (${eventTitle})`);
 }
 
 function renderEmailLogs() {
@@ -161,6 +180,7 @@ function renderEmailLogs() {
     container.innerHTML = '<p class="muted">Waiting for booking activity...</p>';
     return;
   }
+
   container.innerHTML = logs.map(item => `
     <div class="email-log-entry">
       <small>${item.time} • Sent to <strong>${item.toCustomer}</strong> &amp; <strong>${item.toOwner}</strong></small>
@@ -219,7 +239,6 @@ document.querySelectorAll('[data-preference]').forEach(link => link.addEventList
   syncPaymentInfo();
 }));
 
-// Auto-select service dropdown when clicking service cards
 document.querySelectorAll('[data-service]').forEach(link => {
   link.addEventListener('click', () => {
     const key = link.dataset.service;
@@ -285,7 +304,7 @@ form.addEventListener('submit', async event => {
     eventTitle: `Confirmation Request of Service Order [${newOrder.id}]`,
     order: newOrder,
     customerMessage: `Hi ${newOrder.customerName}, your service confirmation request for ${newOrder.serviceName} (${newOrder.device}) has been received. Status: PENDING OWNER APPROVAL. You can cancel this booking anytime using your Cancel button in the Order Portal (Ref: ${newOrder.id}).`,
-    ownerMessage: `New repair confirmation request from ${newOrder.customerName} (${newOrder.mobile}). Open the Owner Admin Control Panel to ACCEPT or CANCEL this service.`
+    ownerMessage: `New repair confirmation request from ${newOrder.customerName} (${newOrder.mobile}). Click the ACCEPT link in this email or open the Owner Admin Control Panel to ACCEPT or CANCEL this service.`
   });
 });
 
@@ -305,6 +324,7 @@ window.handleOwnerAction = async function(orderId, action) {
     saveOrders(orders);
 
     activeOrderId = order.id;
+    switchPortalTab('customer');
     renderCustomerOrder(order.id);
     renderOwnerDashboard();
 
@@ -370,7 +390,7 @@ window.handleCustomerPayment = async function(orderId) {
   await dispatchAutomatedEmails({
     eventTitle: `Official Invoice Receipt [${order.invoiceNo}] — Order ${order.id}`,
     order,
-    customerMessage: `Thank you for your online payment of ₱${order.price.toFixed(2)} via ${order.paymentMethod} (Ref: ${order.paymentRef}). Your Official Invoice Receipt (${order.invoiceNo}) is attached. Reminder: Cancelling within 2 days of acceptance automatically deducts a 10% holding fee (₱${tenPercent}).`,
+    customerMessage: `Thank you for your online payment of ₱${order.price.toFixed(2)} via ${order.paymentMethod} (Ref: ${order.paymentRef}). Your Official Invoice Receipt (${order.invoiceNo}) has been generated. Reminder: Cancelling within 2 days of acceptance automatically deducts a 10% holding fee (₱${tenPercent}).`,
     ownerMessage: `[OWNER COPY - OFFICIAL INVOICE ${order.invoiceNo}] Customer ${order.customerName} paid ₱${order.price.toFixed(2)} online via ${order.paymentMethod} (Ref: ${order.paymentRef}).`
   });
 };
@@ -381,7 +401,6 @@ window.handleCustomerCancel = async function(orderId) {
   const order = orders.find(o => o.id === orderId);
   if (!order) return;
 
-  // Case A: Still pending owner approval -> Free cancellation
   if (order.status === 'PENDING_OWNER_APPROVAL') {
     if (!confirm(`Cancel booking request ${order.id}? Since the owner has not accepted it yet, there is no cancellation fee.`)) return;
     order.status = 'CANCELLED_BY_CUSTOMER_FREE';
@@ -400,7 +419,6 @@ window.handleCustomerCancel = async function(orderId) {
     return;
   }
 
-  // Case B: Already Accepted or Paid -> Automatic 10% Holding/Service Fee Deduction within 2 days
   const twoDaysMs = 2 * 24 * 60 * 60 * 1000;
   const elapsedMs = Date.now() - (order.acceptedAt || order.createdAt);
   const isWithinTwoDays = elapsedMs <= twoDaysMs;
@@ -463,12 +481,14 @@ function renderCustomerOrder(orderId) {
 
   let dynamicStageHTML = '';
 
-  // Stage 1 UI: Waiting for Owner
   if (order.status === 'PENDING_OWNER_APPROVAL') {
     dynamicStageHTML = `
       <div class="policy-warning-banner">
         <strong>Confirmation Request Sent to You &amp; the Shop Owner</strong>
-        Your request is awaiting owner review. Tip for presentation: Switch to the <strong>🛠️ Owner Admin Control Panel</strong> tab above to click <em>Accept Repair</em>!
+        Your request is awaiting owner review. As the shop owner, you can click the button below (or the link inside your Gmail) to accept or decline this service:
+        <div style="margin-top:12px;">
+          <button type="button" class="button button-small" onclick="switchPortalTab('owner'); renderOwnerDashboard();">🛠️ Open Owner Admin Control Panel to Accept / Cancel</button>
+        </div>
       </div>
       <div class="action-btn-row">
         <button type="button" class="button button-small button-danger" onclick="handleCustomerCancel('${order.id}')">✕ Cancel Booking Request (Free before acceptance)</button>
@@ -476,7 +496,6 @@ function renderCustomerOrder(orderId) {
     `;
   }
 
-  // Stage 2 UI: Owner Accepted -> Automated Online Payment Checkout + 2-Day 10% Warning
   if (order.status === 'ACCEPTED_AWAITING_PAYMENT') {
     dynamicStageHTML = `
       <div class="policy-warning-banner">
@@ -528,7 +547,6 @@ function renderCustomerOrder(orderId) {
     `;
   }
 
-  // Stage 3 UI: Paid & Confirmed -> View Invoice Receipt or Cancel with 10% Deduction
   if (order.status === 'PAID_CONFIRMED') {
     dynamicStageHTML = `
       <div class="policy-warning-banner">
@@ -542,7 +560,6 @@ function renderCustomerOrder(orderId) {
     `;
   }
 
-  // Stage 4 UI: Cancelled with 10% Holding Fee Deducted
   if (order.status === 'CANCELLED_10_PERCENT_DEDUCTED') {
     dynamicStageHTML = `
       <div class="deduction-banner">
@@ -669,7 +686,7 @@ window.openInvoiceModal = function(orderId) {
     <div class="invoice-row total-row"><span>Total Service Amount Paid</span><span>₱${order.price.toFixed(2)}</span></div>
     ${isDeducted ? `
       <div class="invoice-row deduction-row"><span>Less: Automated 10% Cancellation Holding Fee (Within 2 Days)</span><span>-₱${order.holdingFeeDeducted.toFixed(2)}</span></div>
-      <div class="invoice-row refund-row"><span>Net Automated Refund to Customer</span><span>₱${order.netRefundAmount.toFixed(2)}</span></div>
+      <div class="invoice-row refund-row"><span>Net Automated Refund to Customer</span><span>₱${order.netRefundAddress || order.netRefundAmount.toFixed(2)}</span></div>
     ` : ''}
   `;
 
@@ -684,13 +701,13 @@ document.getElementById('print-invoice-btn').addEventListener('click', () => {
 });
 
 /* ================= PORTAL TABS & ORDER LOOKUP ================= */
-function switchPortalTab(role) {
+window.switchPortalTab = function(role) {
   const isCust = role === 'customer';
   document.getElementById('tab-customer').classList.toggle('is-active', isCust);
   document.getElementById('tab-owner').classList.toggle('is-active', !isCust);
   document.getElementById('panel-customer').hidden = !isCust;
   document.getElementById('panel-owner').hidden = isCust;
-}
+};
 
 document.getElementById('tab-customer').addEventListener('click', () => switchPortalTab('customer'));
 document.getElementById('tab-owner').addEventListener('click', () => {
@@ -704,6 +721,46 @@ document.getElementById('lookup-btn').addEventListener('click', () => {
   switchPortalTab('customer');
   renderCustomerOrder(val);
 });
+
+/* Handle 1-Click Gmail Links */
+function handleIncomingEmailActionLinks() {
+  const params = new URLSearchParams(window.location.search);
+  const orderId = params.get('order');
+  const action = params.get('action');
+  const encodedData = params.get('data');
+
+  if (!orderId) return;
+
+  const orders = getOrders();
+  let existing = orders.find(o => o.id === orderId);
+
+  if (!existing && encodedData) {
+    try {
+      existing = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(encodedData)))));
+      orders.unshift(existing);
+      saveOrders(orders);
+    } catch (e) {
+      console.warn('Could not decode order URL payload:', e);
+    }
+  }
+
+  if (!existing) return;
+  activeOrderId = existing.id;
+  window.history.replaceState({}, document.title, window.location.pathname + '#order-portal');
+
+  if (action === 'owner-accept' && existing.status === 'PENDING_OWNER_APPROVAL') {
+    setTimeout(() => handleOwnerAction(existing.id, 'ACCEPT'), 300);
+  } else if (action === 'owner-cancel' && existing.status === 'PENDING_OWNER_APPROVAL') {
+    setTimeout(() => handleOwnerAction(existing.id, 'CANCEL'), 300);
+  } else if (action === 'customer-cancel') {
+    switchPortalTab('customer');
+    renderCustomerOrder(existing.id);
+    setTimeout(() => handleCustomerCancel(existing.id), 300);
+  } else {
+    switchPortalTab('customer');
+    renderCustomerOrder(existing.id);
+  }
+}
 
 document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
@@ -721,3 +778,4 @@ document.addEventListener('click', event => {
 renderCustomerOrder();
 renderOwnerDashboard();
 renderEmailLogs();
+handleIncomingEmailActionLinks();
