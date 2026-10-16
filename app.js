@@ -4,50 +4,66 @@
 const menu = document.querySelector('.menu-toggle');
 const navigation = document.querySelector('#navigation');
 function closeMenu(returnFocus = false) {
+  if (!navigation || !menu) return;
   navigation.classList.remove('is-open');
   menu.setAttribute('aria-expanded', 'false');
   if (returnFocus) menu.focus();
 }
-menu.addEventListener('click', () => {
-  const open = menu.getAttribute('aria-expanded') !== 'true';
-  menu.setAttribute('aria-expanded', String(open));
-  navigation.classList.toggle('is-open', open);
+if (menu && navigation) {
+  menu.addEventListener('click', () => {
+    const open = menu.getAttribute('aria-expanded') !== 'true';
+    menu.setAttribute('aria-expanded', String(open));
+    navigation.classList.toggle('is-open', open);
+  });
+  navigation.addEventListener('click', event => {
+    if (event.target.closest('a')) closeMenu();
+  });
+}
+matchMedia('(min-width: 761px)').addEventListener('change', event => {
+  if (event.matches) closeMenu();
 });
-navigation.addEventListener('click', event => { if (event.target.closest('a')) closeMenu(); });
-matchMedia('(min-width: 761px)').addEventListener('change', event => { if (event.matches) closeMenu(); });
 
 const chatToggle = document.querySelector('#chat-toggle');
 const chatPanel = document.querySelector('#chat-panel');
 function closeChat(returnFocus = false) {
+  if (!chatPanel || !chatToggle) return;
   chatPanel.hidden = true;
   chatToggle.setAttribute('aria-expanded', 'false');
   if (returnFocus) chatToggle.focus();
 }
-chatToggle.addEventListener('click', () => {
-  const opening = chatPanel.hidden;
-  chatPanel.hidden = !opening;
-  chatToggle.setAttribute('aria-expanded', String(opening));
-  if (opening) document.querySelector('#close-chat').focus();
-});
-document.querySelector('#close-chat').addEventListener('click', () => closeChat(true));
-document.querySelector('#chat-inquiry').addEventListener('click', () => {
-  closeChat();
-  document.querySelector('#customer-name').focus();
-});
+if (chatToggle && chatPanel) {
+  chatToggle.addEventListener('click', () => {
+    const opening = chatPanel.hidden;
+    chatPanel.hidden = !opening;
+    chatToggle.setAttribute('aria-expanded', String(opening));
+    if (opening) document.querySelector('#close-chat').focus();
+  });
+  document.querySelector('#close-chat').addEventListener('click', () => closeChat(true));
+  document.querySelector('#chat-inquiry').addEventListener('click', () => {
+    closeChat();
+    document.querySelector('#customer-name').focus();
+  });
+}
 
 /* ================= EMAIL & FORMSPREE AUTOMATION CONFIG ================= */
 const AUTOMATION_CONFIG = {
-  FORMSPREE_ENDPOINT: 'https://formspree.io/f/xwlpvlgd',[cite: 4, 5]
-  OWNER_EMAIL: 'giancastlo117@gmail.com', // Ang iyong Owner Gmail
-  // Naka-dagdag na ang iyong mga tunay na EmailJS keys:
+  FORMSPREE_ENDPOINT: 'https://formspree.io/f/xwlpvlgd',
+  OWNER_EMAIL: 'giancastlo117@gmail.com',
   EMAILJS_PUBLIC_KEY: 'T4ns6nIGTXCULdidV',
   EMAILJS_SERVICE_ID: 'service_f6v7jiz',
   EMAILJS_TEMPLATE_ID: 'template_twgq1qn'
 };
 
-if (window.emailjs && AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
-  window.emailjs.init(AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY);
+function initEmailJS() {
+  if (window.emailjs && AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY) {
+    try {
+      window.emailjs.init({ publicKey: AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY });
+    } catch {
+      window.emailjs.init(AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY);
+    }
+  }
 }
+initEmailJS();
 
 /* ================= BOOKING STATE & URL ACTION LINKS ================= */
 const STORAGE_KEY = 'circuit_senshi_orders_v1';
@@ -81,18 +97,19 @@ function showToast(message) {
   toast.textContent = message;
   toast.hidden = false;
   clearTimeout(showToast._timer);
-  showToast._timer = setTimeout(() => { toast.hidden = true; }, 6000);
+  showToast._timer = setTimeout(() => {
+    toast.hidden = true;
+  }, 6000);
 }
 
-/* Lumilikha ng 1-Click Action Links para sa Gmail */
 function buildActionUrl(order, actionType) {
   const baseUrl = window.location.origin + window.location.pathname;
   const payload = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(order)))));
   return `${baseUrl}?order=${encodeURIComponent(order.id)}&action=${encodeURIComponent(actionType)}&data=${payload}#order-portal`;
 }
 
-/* Nagpapadala ng Automated Emails sa Customer at Owner */
 async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, ownerMessage }) {
+  initEmailJS();
   const timestamp = new Date().toLocaleString();
   const logs = getEmailLogs();
 
@@ -112,14 +129,56 @@ async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, own
   localStorage.setItem(EMAIL_LOG_KEY, JSON.stringify(logs.slice(0, 20)));
   renderEmailLogs();
 
-  // 1. Ipadala sa Formspree (Backup Copy para sa Owner)
+  // 1. Send direct automated emails via EmailJS to Customer & Owner Gmail
+  if (window.emailjs) {
+    try {
+      await window.emailjs.send(
+        AUTOMATION_CONFIG.EMAILJS_SERVICE_ID,
+        AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID,
+        {
+          to_email: order.customerEmail,
+          to_name: order.customerName,
+          name: 'Circuit Senshi Tech Solutions',
+          email: AUTOMATION_CONFIG.OWNER_EMAIL,
+          subject: eventTitle,
+          order_id: order.id,
+          service_name: order.serviceName,
+          amount: `₱${order.price.toFixed(2)}`,
+          status: order.status.replaceAll('_', ' '),
+          message_body: `${customerMessage}\n\nCancel Booking Link:\n${customerCancelUrl}`,
+          action_link: customerPortalUrl
+        }
+      );
+
+      await window.emailjs.send(
+        AUTOMATION_CONFIG.EMAILJS_SERVICE_ID,
+        AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID,
+        {
+          to_email: AUTOMATION_CONFIG.OWNER_EMAIL,
+          to_name: 'Circuit Senshi Owner',
+          name: order.customerName,
+          email: order.customerEmail,
+          subject: `[OWNER ACTION] ${eventTitle}`,
+          order_id: order.id,
+          service_name: order.serviceName,
+          amount: `₱${order.price.toFixed(2)}`,
+          status: order.status.replaceAll('_', ' '),
+          message_body: `${ownerMessage}\n\nACCEPT REPAIR (1-CLICK):\n${ownerAcceptUrl}\n\nCANCEL SERVICE (1-CLICK):\n${ownerCancelUrl}`,
+          action_link: ownerAcceptUrl
+        }
+      );
+    } catch (err) {
+      console.warn('EmailJS dispatch warning:', err);
+    }
+  }
+
+  // 2. Background backup copy to Formspree (AJAX only - no page redirect)
   try {
     await fetch(AUTOMATION_CONFIG.FORMSPREE_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({
         _subject: `[Circuit Senshi] ${eventTitle} (${order.id})`,
-        _replyto: order.customerEmail,
         orderReference: order.id,
         status: order.status,
         customerName: order.customerName,
@@ -129,47 +188,14 @@ async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, own
         amount: `₱${order.price.toFixed(2)}`,
         CLICK_TO_ACCEPT_REPAIR: ownerAcceptUrl,
         CLICK_TO_CANCEL_REPAIR: ownerCancelUrl,
-        OPEN_CUSTOMER_PORTAL: customerPortalUrl,
-        customerCopySent: customerMessage,
-        ownerCopySent: ownerMessage
+        OPEN_CUSTOMER_PORTAL: customerPortalUrl
       })
     });
   } catch (err) {
-    console.warn('Formspree sync notice:', err);
+    console.warn('Formspree background sync notice:', err);
   }
 
-  // 2. Ipadala sa Tunay na Customer Gmail sa pamamagitan ng EmailJS
-  if (window.emailjs && AUTOMATION_CONFIG.EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
-    try {
-      await window.emailjs.send(AUTOMATION_CONFIG.EMAILJS_SERVICE_ID, AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID, {
-        to_email: order.customerEmail,
-        to_name: order.customerName,
-        subject: eventTitle,
-        order_id: order.id,
-        service_name: order.serviceName,
-        amount: `₱${order.price.toFixed(2)}`,
-        status: order.status,
-        message_body: `${customerMessage}\n\nCancel Booking Link: ${customerCancelUrl}`,
-        action_link: customerPortalUrl
-      });
-
-      await window.emailjs.send(AUTOMATION_CONFIG.EMAILJS_SERVICE_ID, AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID, {
-        to_email: AUTOMATION_CONFIG.OWNER_EMAIL,
-        to_name: 'Circuit Senshi Owner',
-        subject: `[OWNER ACTION] ${eventTitle}`,
-        order_id: order.id,
-        service_name: order.serviceName,
-        amount: `₱${order.price.toFixed(2)}`,
-        status: order.status,
-        message_body: `${ownerMessage}\n\n✔ ACCEPT REPAIR LINK:\n${ownerAcceptUrl}\n\n✕ CANCEL SERVICE LINK:\n${ownerCancelUrl}`,
-        action_link: ownerAcceptUrl
-      });
-    } catch (err) {
-      console.warn('EmailJS send error:', err);
-    }
-  }
-
-  showToast(`📧 Naipadala na ang automated email para sa ${order.id} (${eventTitle})`);
+  showToast(`📧 Automated Gmail sent to ${order.customerEmail} & Owner (${order.id})`);
 }
 
 function renderEmailLogs() {
@@ -193,6 +219,13 @@ function renderEmailLogs() {
 
 /* ================= FORM VALIDATION & SUBMISSION ================= */
 const form = document.querySelector('#repair-form');
+if (form) {
+  // Prevent native HTML redirect to Formspree
+  form.removeAttribute('action');
+  form.removeAttribute('method');
+  form.noValidate = true;
+}
+
 const fields = [
   { element: form.elements.customerName, error: 'name-error', message: 'Enter your name.' },
   { element: form.elements.customerEmail, error: 'email-error', message: 'Enter a valid email address.' },
@@ -234,10 +267,12 @@ function syncPaymentInfo() {
 form.querySelectorAll('input[name="preference"]').forEach(input => {
   input.addEventListener('input', syncPaymentInfo);
 });
-document.querySelectorAll('[data-preference]').forEach(link => link.addEventListener('click', () => {
-  form.elements.preference.value = link.dataset.preference;
-  syncPaymentInfo();
-}));
+document.querySelectorAll('[data-preference]').forEach(link => {
+  link.addEventListener('click', () => {
+    form.elements.preference.value = link.dataset.preference;
+    syncPaymentInfo();
+  });
+});
 
 document.querySelectorAll('[data-service]').forEach(link => {
   link.addEventListener('click', () => {
@@ -251,16 +286,22 @@ document.querySelectorAll('[data-service]').forEach(link => {
 window.addEventListener('pageshow', syncPaymentInfo);
 form.addEventListener('reset', () => setTimeout(syncPaymentInfo, 0));
 syncPaymentInfo();
-form.noValidate = true;
 
-// STAGE 1: Customer Submits Service Confirmation Request
+// STAGE 1: Customer Submits Service Confirmation Request (NO PAGE RELOAD)
 form.addEventListener('submit', async event => {
   event.preventDefault();
+  event.stopPropagation();
+
   const invalid = fields.filter(field => !validate(field));
   if (invalid.length) {
     invalid[0].element.focus();
     return;
   }
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalBtnHTML = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Generating Order ID & Sending Gmail...';
 
   const [serviceName, priceStr] = form.elements.servicePackage.value.split('|');
   const newOrder = {
@@ -298,6 +339,7 @@ form.addEventListener('submit', async event => {
   renderCustomerOrder(newOrder.id);
   renderOwnerDashboard();
 
+  // Scroll smoothly straight to the live Order Portal on the same page
   document.getElementById('order-portal').scrollIntoView({ behavior: 'smooth' });
 
   await dispatchAutomatedEmails({
@@ -306,6 +348,9 @@ form.addEventListener('submit', async event => {
     customerMessage: `Hi ${newOrder.customerName}, your service confirmation request for ${newOrder.serviceName} (${newOrder.device}) has been received. Status: PENDING OWNER APPROVAL. You can cancel this booking anytime using your Cancel button in the Order Portal (Ref: ${newOrder.id}).`,
     ownerMessage: `New repair confirmation request from ${newOrder.customerName} (${newOrder.mobile}). Click the ACCEPT link in this email or open the Owner Admin Control Panel to ACCEPT or CANCEL this service.`
   });
+
+  submitBtn.disabled = false;
+  submitBtn.innerHTML = originalBtnHTML;
 });
 
 /* ================= STAGE 2: OWNER ACCEPT OR CANCEL SERVICE ================= */
@@ -686,7 +731,7 @@ window.openInvoiceModal = function(orderId) {
     <div class="invoice-row total-row"><span>Total Service Amount Paid</span><span>₱${order.price.toFixed(2)}</span></div>
     ${isDeducted ? `
       <div class="invoice-row deduction-row"><span>Less: Automated 10% Cancellation Holding Fee (Within 2 Days)</span><span>-₱${order.holdingFeeDeducted.toFixed(2)}</span></div>
-      <div class="invoice-row refund-row"><span>Net Automated Refund to Customer</span><span>₱${order.netRefundAddress || order.netRefundAmount.toFixed(2)}</span></div>
+      <div class="invoice-row refund-row"><span>Net Automated Refund to Customer</span><span>₱${order.netRefundAmount.toFixed(2)}</span></div>
     ` : ''}
   `;
 
@@ -766,12 +811,14 @@ document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
   const invModal = document.getElementById('invoice-modal');
   if (invModal && !invModal.hidden) invModal.hidden = true;
-  else if (!chatPanel.hidden) closeChat(true);
-  else if (menu.getAttribute('aria-expanded') === 'true') closeMenu(true);
+  else if (chatPanel && !chatPanel.hidden) closeChat(true);
+  else if (menu && menu.getAttribute('aria-expanded') === 'true') closeMenu(true);
 });
 
 document.addEventListener('click', event => {
-  if (!chatPanel.hidden && !chatPanel.contains(event.target) && !chatToggle.contains(event.target)) closeChat();
+  if (chatPanel && !chatPanel.hidden && !chatPanel.contains(event.target) && !chatToggle.contains(event.target)) {
+    closeChat();
+  }
 });
 
 // Initialize Portal on Page Load
