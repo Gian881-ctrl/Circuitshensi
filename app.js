@@ -47,9 +47,9 @@ if (chatToggle && chatPanel) {
 
 /* ================= EMAIL, PIN & FORMSPREE CONFIG ================= */
 const AUTOMATION_CONFIG = {
-  OWNER_PIN: 'gian1825', // Your custom Owner Password required to open the Admin Panel
+  OWNER_PIN: 'gian1825', // Secret Owner Password
+  OWNER_EMAIL: 'giancastillo116@gmail.com', // Your active Gmail address
   FORMSPREE_ENDPOINT: 'https://formspree.io/f/xwlpvlgd',
-  OWNER_EMAIL: 'giancastlo117@gmail.com',
   EMAILJS_PUBLIC_KEY: 'T4ns6nIGTXCULdidV',
   EMAILJS_SERVICE_ID: 'service_f6v7jiz',
   EMAILJS_TEMPLATE_ID: 'template_twgq1qn'
@@ -66,30 +66,11 @@ function initEmailJS() {
 }
 initEmailJS();
 
-/* ================= BOOKING STATE & OWNER AUTH ================= */
+/* ================= BOOKING STATE & OWNER AUTHENTICATION ================= */
 const STORAGE_KEY = 'circuit_senshi_orders_v1';
 const EMAIL_LOG_KEY = 'circuit_senshi_email_log_v1';
 let activeOrderId = null;
 let isOwnerAuthenticated = false;
-
-function verifyOwnerAccess() {
-  if (isOwnerAuthenticated) return true;
-  const enteredPin = prompt('🔒 Owner Admin Access Only.\nEnter Owner PIN to manage bookings:');
-  if (enteredPin === null) return false;
-  if (enteredPin.trim() === AUTOMATION_CONFIG.OWNER_PIN) {
-    isOwnerAuthenticated = true;
-    showToast('🔓 Owner Admin Panel unlocked.');
-    return true;
-  }
-  alert('❌ Access Denied: Incorrect Owner PIN. Only the shop owner can access this panel.');
-  return false;
-}
-
-window.lockOwnerPanel = function() {
-  isOwnerAuthenticated = false;
-  switchPortalTab('customer');
-  showToast('🔒 Owner Admin Panel locked.');
-};
 
 function getOrders() {
   try {
@@ -123,41 +104,48 @@ function showToast(message) {
   }, 6000);
 }
 
-function buildActionUrl(order, actionType) {
+/* Clean, Spam-Safe Portal URL Builder (No giant Base64 strings) */
+function buildCleanPortalUrl(order) {
   const baseUrl = window.location.origin + window.location.pathname;
-  const payload = encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(order)))));
-  return `${baseUrl}?order=${encodeURIComponent(order.id)}&action=${encodeURIComponent(actionType)}&data=${payload}#order-portal`;
+  const params = new URLSearchParams({
+    order: order.id,
+    name: order.customerName,
+    email: order.customerEmail,
+    service: order.serviceName,
+    device: order.device,
+    price: String(order.price),
+    status: order.status
+  });
+  return `${baseUrl}?${params.toString()}#order-portal`;
 }
 
-/* Sends Automated Emails ONLY for Request Form & Official Invoice Receipt */
-async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, ownerMessage, sendEmail = true }) {
+/* Dispatches exact Customer Emails (1, 2, 3) and Owner Emails (1, 2) */
+async function dispatchAutomatedEmails({
+  eventTitle,
+  order,
+  customerMessage,
+  ownerMessage,
+  sendToCustomer = false,
+  sendToOwner = false
+}) {
+  initEmailJS();
   const timestamp = new Date().toLocaleString();
   const logs = getEmailLogs();
-
-  const ownerAcceptUrl = buildActionUrl(order, 'owner-accept');
-  const ownerCancelUrl = buildActionUrl(order, 'owner-cancel');
-  const customerPortalUrl = buildActionUrl(order, 'customer-view');
-  const customerCancelUrl = buildActionUrl(order, 'customer-cancel');
+  const cleanPortalUrl = buildCleanPortalUrl(order);
 
   logs.unshift({
     time: timestamp,
     subject: eventTitle,
-    toCustomer: `${order.customerName} <${order.customerEmail}>`,
-    toOwner: `Owner <${AUTOMATION_CONFIG.OWNER_EMAIL}>`,
-    customerBody: customerMessage,
-    ownerBody: ownerMessage
+    toCustomer: sendToCustomer ? `${order.customerName} <${order.customerEmail}>` : 'No Customer Email',
+    toOwner: sendToOwner ? `Owner <${AUTOMATION_CONFIG.OWNER_EMAIL}>` : 'No Owner Email',
+    customerBody: customerMessage || '—',
+    ownerBody: ownerMessage || '—'
   });
   localStorage.setItem(EMAIL_LOG_KEY, JSON.stringify(logs.slice(0, 20)));
   renderEmailLogs();
 
-  if (!sendEmail) {
-    showToast(`✔ Status updated: ${eventTitle}`);
-    return;
-  }
-
-  initEmailJS();
-
-  if (window.emailjs) {
+  // 1. Send Customer Email via EmailJS
+  if (window.emailjs && sendToCustomer) {
     try {
       await window.emailjs.send(
         AUTOMATION_CONFIG.EMAILJS_SERVICE_ID,
@@ -169,59 +157,69 @@ async function dispatchAutomatedEmails({ eventTitle, order, customerMessage, own
           email: AUTOMATION_CONFIG.OWNER_EMAIL,
           subject: eventTitle,
           order_id: order.id,
-          service_name: order.serviceName,
+          service_name: `${order.serviceName} (${order.device})`,
           amount: `₱${order.price.toFixed(2)}`,
           status: order.status.replaceAll('_', ' '),
-          message_body: `${customerMessage}\n\nCancel / Manage Booking Link:\n${customerCancelUrl}`,
-          action_link: customerPortalUrl
-        }
-      );
-
-      await window.emailjs.send(
-        AUTOMATION_CONFIG.EMAILJS_SERVICE_ID,
-        AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID,
-        {
-          to_email: AUTOMATION_CONFIG.OWNER_EMAIL,
-          to_name: 'Circuit Senshi Owner',
-          name: order.customerName,
-          email: order.customerEmail,
-          subject: `[OWNER COPY] ${eventTitle}`,
-          order_id: order.id,
-          service_name: order.serviceName,
-          amount: `₱${order.price.toFixed(2)}`,
-          status: order.status.replaceAll('_', ' '),
-          message_body: `${ownerMessage}\n\nACCEPT REPAIR LINK:\n${ownerAcceptUrl}\n\nCANCEL SERVICE LINK:\n${ownerCancelUrl}`,
-          action_link: ownerAcceptUrl
+          message_body: customerMessage,
+          action_link: cleanPortalUrl
         }
       );
     } catch (err) {
-      console.warn('EmailJS dispatch warning:', err);
+      console.warn('EmailJS Customer dispatch warning:', err);
     }
   }
 
-  try {
-    await fetch(AUTOMATION_CONFIG.FORMSPREE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({
-        _subject: `[Circuit Senshi] ${eventTitle} (${order.id})`,
-        orderReference: order.id,
-        status: order.status,
-        customerName: order.customerName,
-        customerEmail: order.customerEmail,
-        mobile: order.mobile,
-        service: order.serviceName,
-        amount: `₱${order.price.toFixed(2)}`,
-        invoiceNumber: order.invoiceNo || 'N/A',
-        CLICK_TO_ACCEPT_REPAIR: ownerAcceptUrl,
-        CLICK_TO_CANCEL_REPAIR: ownerCancelUrl
-      })
-    });
-  } catch (err) {
-    console.warn('Formspree background sync notice:', err);
+  // 2. Send Owner Email via EmailJS + Formspree Backup
+  if (sendToOwner) {
+    if (window.emailjs) {
+      try {
+        await window.emailjs.send(
+          AUTOMATION_CONFIG.EMAILJS_SERVICE_ID,
+          AUTOMATION_CONFIG.EMAILJS_TEMPLATE_ID,
+          {
+            to_email: AUTOMATION_CONFIG.OWNER_EMAIL,
+            to_name: 'Gian Castillo (Circuit Senshi Owner)',
+            name: order.customerName,
+            email: order.customerEmail,
+            subject: `[OWNER] ${eventTitle}`,
+            order_id: order.id,
+            service_name: `${order.serviceName} (${order.device})`,
+            amount: `₱${order.price.toFixed(2)}`,
+            status: order.status.replaceAll('_', ' '),
+            message_body: ownerMessage,
+            action_link: cleanPortalUrl
+          }
+        );
+      } catch (err) {
+        console.warn('EmailJS Owner dispatch warning:', err);
+      }
+    }
+
+    try {
+      await fetch(AUTOMATION_CONFIG.FORMSPREE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          _subject: `[Circuit Senshi Owner Copy] ${eventTitle} (${order.id})`,
+          orderReference: order.id,
+          status: order.status,
+          invoiceNumber: order.invoiceNo || 'Pending Payment',
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          mobile: order.mobile,
+          service: order.serviceName,
+          device: order.device,
+          amount: `₱${order.price.toFixed(2)}`,
+          details: ownerMessage,
+          portalLink: cleanPortalUrl
+        })
+      });
+    } catch (err) {
+      console.warn('Formspree backup notice:', err);
+    }
   }
 
-  showToast(`📧 Email sent to ${order.customerEmail} & Owner (${eventTitle})`);
+  showToast(`📧 Automated notification sent: ${eventTitle}`);
 }
 
 function renderEmailLogs() {
@@ -235,13 +233,71 @@ function renderEmailLogs() {
 
   container.innerHTML = logs.map(item => `
     <div class="email-log-entry">
-      <small>${item.time} • Logged for <strong>${item.toCustomer}</strong> &amp; <strong>${item.toOwner}</strong></small>
+      <small>${item.time} • Customer: <strong>${item.toCustomer}</strong> | Owner: <strong>${item.toOwner}</strong></small>
       <strong>${item.subject}</strong>
-      <p style="margin-top:4px;color:var(--muted);"><strong>Customer Copy:</strong> ${item.customerBody}</p>
-      <p style="margin-top:2px;color:var(--muted);"><strong>Owner Copy:</strong> ${item.ownerBody}</p>
+      <p style="margin-top:4px;color:var(--muted);"><strong>Customer Message:</strong> ${item.customerBody}</p>
+      <p style="margin-top:2px;color:var(--muted);"><strong>Owner Message:</strong> ${item.ownerBody}</p>
     </div>
   `).join('');
 }
+
+/* ================= OWNER LOGIN MODAL CONTROLS ================= */
+const ownerLoginBtn = document.getElementById('owner-login-btn');
+const ownerAuthModal = document.getElementById('owner-auth-modal');
+const ownerAuthForm = document.getElementById('owner-auth-form');
+const ownerPassInput = document.getElementById('owner-password-input');
+const ownerAuthError = document.getElementById('owner-auth-error');
+
+ownerLoginBtn.addEventListener('click', () => {
+  if (isOwnerAuthenticated) {
+    switchPortalTab('owner');
+    renderOwnerDashboard();
+    return;
+  }
+  ownerAuthError.textContent = '';
+  ownerPassInput.value = '';
+  ownerAuthModal.hidden = false;
+  setTimeout(() => ownerPassInput.focus(), 50);
+});
+
+document.getElementById('cancel-auth-btn').addEventListener('click', () => {
+  ownerAuthModal.hidden = true;
+});
+
+ownerAuthForm.addEventListener('submit', event => {
+  event.preventDefault();
+  if (ownerPassInput.value.trim() === AUTOMATION_CONFIG.OWNER_PIN) {
+    isOwnerAuthenticated = true;
+    ownerAuthModal.hidden = true;
+    document.getElementById('tab-owner').hidden = false;
+    ownerLoginBtn.hidden = true;
+    switchPortalTab('owner');
+    renderOwnerDashboard();
+    showToast('🔓 Owner Admin Panel unlocked.');
+  } else {
+    ownerAuthError.textContent = 'Incorrect Owner Password. Access denied.';
+    ownerPassInput.focus();
+  }
+});
+
+document.getElementById('lock-owner-btn').addEventListener('click', () => {
+  isOwnerAuthenticated = false;
+  document.getElementById('tab-owner').hidden = true;
+  ownerLoginBtn.hidden = false;
+  switchPortalTab('customer');
+  showToast('🔒 Owner Admin Mode locked and hidden.');
+});
+
+document.getElementById('clear-demo-btn').addEventListener('click', () => {
+  if (!confirm('Clear all test bookings and email logs for a fresh presentation?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(EMAIL_LOG_KEY);
+  activeOrderId = null;
+  renderCustomerOrder();
+  renderOwnerDashboard();
+  renderEmailLogs();
+  showToast('🧹 All test bookings cleared for presentation!');
+});
 
 /* ================= FORM VALIDATION & SUBMISSION ================= */
 const form = document.querySelector('#repair-form');
@@ -312,7 +368,7 @@ window.addEventListener('pageshow', syncPaymentInfo);
 form.addEventListener('reset', () => setTimeout(syncPaymentInfo, 0));
 syncPaymentInfo();
 
-// EMAIL #1 TRIGGER: Customer Submits Service Confirmation Request Form
+/* ================= STAGE 1: SUBMIT REQUEST (CUSTOMER EMAIL #1 + OWNER EMAIL #1) ================= */
 form.addEventListener('submit', async event => {
   event.preventDefault();
   event.stopPropagation();
@@ -326,7 +382,7 @@ form.addEventListener('submit', async event => {
   const submitBtn = form.querySelector('button[type="submit"]');
   const originalBtnHTML = submitBtn.innerHTML;
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Submitting Request & Sending Confirmation Email...';
+  submitBtn.textContent = 'Sending Confirmation Request...';
 
   const [serviceName, priceStr] = form.elements.servicePackage.value.split('|');
   const newOrder = {
@@ -366,21 +422,36 @@ form.addEventListener('submit', async event => {
 
   document.getElementById('order-portal').scrollIntoView({ behavior: 'smooth' });
 
+  // Customer Email #1 (Waiting for Owner Approval) + Owner Email #1 (Customer Request to Approve/Decline)
   await dispatchAutomatedEmails({
-    eventTitle: `Confirmation Request of Service Order [${newOrder.id}]`,
+    eventTitle: `Service Confirmation Request — Waiting for Owner Approval [${newOrder.id}]`,
     order: newOrder,
-    customerMessage: `Hi ${newOrder.customerName}, your service confirmation request for ${newOrder.serviceName} (${newOrder.device}) has been received. Status: PENDING OWNER APPROVAL. Once accepted, you can pay online in the Order Portal (Ref: ${newOrder.id}). Note: Cancelling within 2 days after owner acceptance deducts a 10% holding fee.`,
-    ownerMessage: `New repair confirmation request from ${newOrder.customerName} (${newOrder.mobile}). Unlock the Owner Admin Panel (PIN: gian1825) or click the link below to ACCEPT or CANCEL this service.`,
-    sendEmail: true
+    customerMessage:
+      `Your repair confirmation request has been sent to Circuit Senshi and is currently WAITING FOR OWNER APPROVAL.\n\n` +
+      `• Service Requested: ${newOrder.serviceName}\n` +
+      `• Device / Project: ${newOrder.device} (${newOrder.preference})\n` +
+      `• Issue Details: ${newOrder.issue}\n` +
+      `• Estimated Amount: ₱${newOrder.price.toFixed(2)}\n\n` +
+      `Once the owner approves your request, you will receive an approval email so you can proceed with online payment. You can also cancel your booking for free while it is still pending approval using the link below.`,
+    ownerMessage:
+      `NEW CUSTOMER SERVICE REQUEST — ACTION REQUIRED (APPROVE OR DECLINE)\n\n` +
+      `• Customer: ${newOrder.customerName} (${newOrder.customerEmail} / ${newOrder.mobile})\n` +
+      `• Service: ${newOrder.serviceName}\n` +
+      `• Device: ${newOrder.device} (${newOrder.preference})\n` +
+      `• Fault / Issue: ${newOrder.issue}\n` +
+      `• Quoted Amount: ₱${newOrder.price.toFixed(2)}\n\n` +
+      `Open the Order Portal link below and unlock Owner Admin (Password: gian1825) to APPROVE or DECLINE this request.`,
+    sendToCustomer: true,
+    sendToOwner: true
   });
 
   submitBtn.disabled = false;
   submitBtn.innerHTML = originalBtnHTML;
 });
 
-/* ================= STAGE 2: OWNER ACCEPT OR CANCEL (PROTECTED BY PIN) ================= */
+/* ================= STAGE 2: OWNER APPROVES REQUEST (CUSTOMER EMAIL #2) ================= */
 window.handleOwnerAction = async function(orderId, action) {
-  if (!verifyOwnerAccess()) return;
+  if (!isOwnerAuthenticated) return;
 
   const orders = getOrders();
   const order = orders.find(o => o.id === orderId);
@@ -401,12 +472,22 @@ window.handleOwnerAction = async function(orderId, action) {
     renderOwnerDashboard();
 
     const tenPercent = (order.price * 0.10).toFixed(2);
+
+    // Customer Email #2 (Owner Approved -> Ready to Pay Online)
     await dispatchAutomatedEmails({
-      eventTitle: `Repair Accepted — Online Checkout Unlocked [${order.id}]`,
+      eventTitle: `Repair Request Approved — Ready for Online Payment [${order.id}]`,
       order,
-      customerMessage: `Owner accepted your repair (${order.serviceName}). Online payment (₱${order.price.toFixed(2)} via GCash/Maya/Bank) is now unlocked in the portal. Cancelling within 2 days incurs a 10% holding fee (₱${tenPercent}).`,
-      ownerMessage: `You accepted Order ${order.id}. Customer can now pay online to receive their Official Invoice Receipt.`,
-      sendEmail: false
+      customerMessage:
+        `Good news! The owner has APPROVED your repair request for ${order.serviceName} (${order.device}).\n\n` +
+        `Your booking is now ready for online payment:\n` +
+        `• Approved Amount to Pay: ₱${order.price.toFixed(2)}\n` +
+        `• Available Online Channels: GCash, BDO/BPI Bank Transfer, or Maya\n\n` +
+        `IMPORTANT 2-DAY CANCELLATION POLICY:\n` +
+        `Once your repair is approved and paid, cancelling within 2 days (48 hours) will automatically deduct a 10% service/holding fee (₱${tenPercent}).\n\n` +
+        `Click the Order Portal link below to complete your online payment and receive your Official Invoice Receipt.`,
+      ownerMessage: `You approved Order ${order.id}. Customer has been emailed to pay ₱${order.price.toFixed(2)} online.`,
+      sendToCustomer: true,
+      sendToOwner: false
     });
   } else if (action === 'CANCEL') {
     order.status = 'CANCELLED_BY_OWNER';
@@ -417,16 +498,17 @@ window.handleOwnerAction = async function(orderId, action) {
     renderOwnerDashboard();
 
     await dispatchAutomatedEmails({
-      eventTitle: `Service Request Declined by Owner [${order.id}]`,
+      eventTitle: `Service Request Declined by Shop [${order.id}]`,
       order,
-      customerMessage: `Your repair request (${order.id}) was cancelled by the shop owner. No payment was charged.`,
-      ownerMessage: `You cancelled/declined Order ${order.id}.`,
-      sendEmail: false
+      customerMessage: `We regret to inform you that your service request (${order.id}) for ${order.device} could not be accommodated at this time. No payment was charged.`,
+      ownerMessage: `You declined Order ${order.id}.`,
+      sendToCustomer: true,
+      sendToOwner: false
     });
   }
 };
 
-/* ================= EMAIL #2 TRIGGER: CUSTOMER PAYS -> OFFICIAL INVOICE RECEIPT ================= */
+/* ================= STAGE 3: CUSTOMER PAYS (CUSTOMER EMAIL #3 + OWNER EMAIL #2) ================= */
 window.handleCustomerPayment = async function(orderId) {
   const orders = getOrders();
   const order = orders.find(o => o.id === orderId);
@@ -461,12 +543,30 @@ window.handleCustomerPayment = async function(orderId) {
   openInvoiceModal(order.id);
 
   const tenPercent = (order.price * 0.10).toFixed(2);
+  const paidDateStr = new Date(order.paidAt).toLocaleString();
+
+  // Customer Email #3 (Official Invoice Receipt) + Owner Email #2 (Tailored Copy of Invoice Receipt)
+  const receiptSummary =
+    `OFFICIAL INVOICE RECEIPT — ${order.invoiceNo}\n` +
+    `----------------------------------------\n` +
+    `• Order Reference: ${order.id}\n` +
+    `• Date Paid: ${paidDateStr}\n` +
+    `• Customer: ${order.customerName} (${order.customerEmail})\n` +
+    `• Repair Service: ${order.serviceName}\n` +
+    `• Device / Project: ${order.device} (${order.preference})\n` +
+    `• Payment Method: ${order.paymentMethod}\n` +
+    `• Payment Reference No.: ${order.paymentRef}\n` +
+    `• Total Amount Paid: ₱${order.price.toFixed(2)}\n` +
+    `----------------------------------------\n` +
+    `2-Day Cancellation Policy: Cancelling within 2 days (48 hours) of confirmation automatically deducts a 10% holding fee (₱${tenPercent}).`;
+
   await dispatchAutomatedEmails({
-    eventTitle: `Official Invoice Receipt [${order.invoiceNo}] — Order ${order.id}`,
+    eventTitle: `Official Invoice Receipt [${order.invoiceNo}] — ${order.serviceName}`,
     order,
-    customerMessage: `OFFICIAL INVOICE RECEIPT (${order.invoiceNo})\nThank you for your online payment of ₱${order.price.toFixed(2)} via ${order.paymentMethod} (Ref: ${order.paymentRef}).\n\nPolicy Reminder: Cancelling within 2 days of confirmation automatically deducts a 10% holding fee (₱${tenPercent}).`,
-    ownerMessage: `[OWNER COPY - OFFICIAL INVOICE ${order.invoiceNo}]\nCustomer ${order.customerName} paid ₱${order.price.toFixed(2)} online via ${order.paymentMethod} (Ref: ${order.paymentRef}).`,
-    sendEmail: true
+    customerMessage: `Thank you for your payment! Below is your Official Invoice Receipt for your repair:\n\n${receiptSummary}`,
+    ownerMessage: `OWNER COPY OF OFFICIAL INVOICE RECEIPT\nCustomer ${order.customerName} has completed online payment. Below is your exact copy of the customer's invoice:\n\n${receiptSummary}`,
+    sendToCustomer: true,
+    sendToOwner: true
   });
 };
 
@@ -477,21 +577,14 @@ window.handleCustomerCancel = async function(orderId) {
   if (!order) return;
 
   if (order.status === 'PENDING_OWNER_APPROVAL') {
-    if (!confirm(`Cancel booking request ${order.id}? Since the owner has not accepted it yet, there is no cancellation fee.`)) return;
+    if (!confirm(`Cancel booking request ${order.id}? Since the owner has not approved it yet, there is no cancellation fee.`)) return;
     order.status = 'CANCELLED_BY_CUSTOMER_FREE';
     order.cancelledAt = Date.now();
     saveOrders(orders);
 
     renderCustomerOrder(order.id);
     renderOwnerDashboard();
-
-    await dispatchAutomatedEmails({
-      eventTitle: `Booking Cancelled by Customer (No Fee) [${order.id}]`,
-      order,
-      customerMessage: `Your booking request (${order.id}) has been cancelled prior to owner acceptance. No fee was charged.`,
-      ownerMessage: `Customer ${order.customerName} cancelled pending request ${order.id} before acceptance.`,
-      sendEmail: false
-    });
+    showToast(`Booking ${order.id} cancelled (No fee).`);
     return;
   }
 
@@ -503,7 +596,7 @@ window.handleCustomerCancel = async function(orderId) {
 
   const confirmed = confirm(
     `AUTOMATED 2-DAY CANCELLATION POLICY WARNING:\n\n` +
-    `Your repair has already been accepted${order.paidAt ? ' and paid' : ''}. Cancelling ${isWithinTwoDays ? 'within 2 days (48 hours)' : 'now'} automatically deducts a 10% Service / Holding Fee:\n\n` +
+    `Your repair has already been approved${order.paidAt ? ' and paid' : ''}. Cancelling ${isWithinTwoDays ? 'within 2 days (48 hours)' : 'now'} automatically deducts a 10% Service / Holding Fee:\n\n` +
     `• Service Total: ₱${order.price.toFixed(2)}\n` +
     `• 10% Holding Fee Deduction: -₱${feeAmount.toFixed(2)}\n` +
     `• Automated Net Refund: ₱${netRefund.toFixed(2)}\n\n` +
@@ -524,12 +617,20 @@ window.handleCustomerCancel = async function(orderId) {
   renderOwnerDashboard();
   openInvoiceModal(order.id);
 
+  const cancelBreakdown =
+    `CANCELLATION & 10% HOLDING FEE RECEIPT (${order.invoiceNo})\n` +
+    `• Order Reference: ${order.id} (${order.serviceName})\n` +
+    `• Original Repair Amount: ₱${order.price.toFixed(2)}\n` +
+    `• Less 10% Holding Fee (2-Day Policy): -₱${feeAmount.toFixed(2)}\n` +
+    `• Net Automated Refund to Customer: ₱${netRefund.toFixed(2)}`;
+
   await dispatchAutomatedEmails({
-    eventTitle: `Cancelled Within 2 Days — 10% Fee Deducted [${order.invoiceNo}]`,
+    eventTitle: `Cancellation & 10% Holding Fee Receipt [${order.invoiceNo}]`,
     order,
-    customerMessage: `You cancelled confirmed Order ${order.id} within the 2-day window. Original Amount: ₱${order.price.toFixed(2)} | Less 10% Holding Fee: -₱${feeAmount.toFixed(2)} | Net Refund: ₱${netRefund.toFixed(2)}.`,
-    ownerMessage: `[OWNER COPY] Customer ${order.customerName} cancelled Order ${order.id}. 10% holding fee (₱${feeAmount.toFixed(2)}) deducted. Net refund: ₱${netRefund.toFixed(2)}.`,
-    sendEmail: false
+    customerMessage: `Your confirmed repair booking (${order.id}) was cancelled within the 2-day window. A 10% holding fee has been automatically deducted:\n\n${cancelBreakdown}`,
+    ownerMessage: `OWNER COPY — Customer ${order.customerName} cancelled confirmed Order ${order.id}. 10% holding fee was automatically deducted:\n\n${cancelBreakdown}`,
+    sendToCustomer: true,
+    sendToOwner: true
   });
 };
 
@@ -547,11 +648,11 @@ function renderCustomerOrder(orderId) {
   activeOrderId = order.id;
   const tenPercent = (order.price * 0.10).toFixed(2);
 
-  let statusBadge = `<span class="status-pill status-pending">⏳ Pending Owner Approval</span>`;
+  let statusBadge = `<span class="status-pill status-pending">⏳ Waiting for Owner Approval</span>`;
   if (order.status === 'ACCEPTED_AWAITING_PAYMENT') {
-    statusBadge = `<span class="status-pill status-accepted">✓ Accepted by Owner — Awaiting Online Payment</span>`;
+    statusBadge = `<span class="status-pill status-accepted">✓ Approved by Owner — Ready for Payment</span>`;
   } else if (order.status === 'PAID_CONFIRMED') {
-    statusBadge = `<span class="status-pill status-paid">✔ Paid Online &amp; Confirmed</span>`;
+    statusBadge = `<span class="status-pill status-paid">✔ Paid Online &amp; Invoice Sent</span>`;
   } else if (order.status.includes('CANCELLED')) {
     statusBadge = `<span class="status-pill status-cancelled">✕ ${order.status.replaceAll('_', ' ')}</span>`;
   }
@@ -561,11 +662,11 @@ function renderCustomerOrder(orderId) {
   if (order.status === 'PENDING_OWNER_APPROVAL') {
     dynamicStageHTML = `
       <div class="policy-warning-banner">
-        <strong>Confirmation Request Sent to You &amp; the Shop Owner</strong>
-        Your booking request has been sent! Please wait for the shop owner to review and accept your request. While your request is still pending approval, you can cancel it below for free.
+        <strong>1. Confirmation Request Sent — Waiting for Owner Approval</strong>
+        Your request has been emailed to you and the shop owner. Once the owner approves your repair, you will receive an approval email and online payment will unlock here automatically. You may cancel for free below while awaiting approval.
       </div>
       <div class="action-btn-row">
-        <button type="button" class="button button-small button-danger" onclick="handleCustomerCancel('${order.id}')">✕ Cancel Booking Request (Free before acceptance)</button>
+        <button type="button" class="button button-small button-danger" onclick="handleCustomerCancel('${order.id}')">✕ Cancel Booking Request (Free before approval)</button>
       </div>
     `;
   }
@@ -573,13 +674,13 @@ function renderCustomerOrder(orderId) {
   if (order.status === 'ACCEPTED_AWAITING_PAYMENT') {
     dynamicStageHTML = `
       <div class="policy-warning-banner">
-        <strong>⚠️ Mandatory 2-Day / 10% Cancellation Fee Warning</strong>
-        Your repair has been accepted by the owner! Please complete your online payment below. Note that once accepted, if you cancel within <strong>2 days (48 hours)</strong>, an automatic <strong>10% service/holding fee (₱${tenPercent})</strong> will be deducted from your payment.
+        <strong>2. Owner Approved Your Request — Ready for Online Payment!</strong>
+        An approval email has been sent to <strong>${order.customerEmail}</strong>. Please complete your payment of <strong>₱${order.price.toFixed(2)}</strong> below. <br><em>Warning: Once approved, cancelling within 2 days (48 hours) automatically deducts a 10% service/holding fee (₱${tenPercent}).</em>
       </div>
 
       <div class="payment-checkout-box">
         <h4>Automated Online Payment Checkout</h4>
-        <p class="muted">Select your preferred online payment channel to receive your automated Official Invoice Receipt via Gmail.</p>
+        <p class="muted">Select your preferred online payment method to receive your tailored Official Invoice Receipt via Gmail.</p>
 
         <div class="payment-methods-grid">
           <label class="pay-method-card">
@@ -610,11 +711,11 @@ function renderCustomerOrder(orderId) {
 
         <label class="policy-checkbox-row">
           <input type="checkbox" id="policy-consent-check" checked>
-          <span>I understand that cancelling this accepted service within <strong>2 days</strong> will automatically deduct a <strong>10% service/holding fee (₱${tenPercent})</strong> from my payment.</span>
+          <span>I understand that cancelling this approved service within <strong>2 days</strong> will automatically deduct a <strong>10% service/holding fee (₱${tenPercent})</strong> from my payment.</span>
         </label>
 
         <div class="action-btn-row">
-          <button type="button" class="button" onclick="handleCustomerPayment('${order.id}')">Pay ₱${order.price.toFixed(2)} Online &amp; Send Invoice Receipt <span aria-hidden="true">↗</span></button>
+          <button type="button" class="button" onclick="handleCustomerPayment('${order.id}')">Pay ₱${order.price.toFixed(2)} Online &amp; Receive Invoice Receipt <span aria-hidden="true">↗</span></button>
           <button type="button" class="button button-small button-danger" onclick="handleCustomerCancel('${order.id}')">✕ Cancel Booking (10% Fee Applies)</button>
         </div>
       </div>
@@ -624,8 +725,8 @@ function renderCustomerOrder(orderId) {
   if (order.status === 'PAID_CONFIRMED') {
     dynamicStageHTML = `
       <div class="policy-warning-banner">
-        <strong>✔ Online Payment Confirmed &amp; Official Invoice Sent!</strong>
-        Official Invoice <strong>${order.invoiceNo}</strong> has been automatically emailed to <strong>${order.customerEmail}</strong> and the Shop Owner. Cancelling within 2 days of confirmation automatically deducts <strong>10% (₱${tenPercent})</strong> as a service/holding fee.
+        <strong>3. Online Payment Confirmed — Official Invoice Receipt Sent!</strong>
+        Official Invoice <strong>${order.invoiceNo}</strong> has been automatically emailed to <strong>${order.customerEmail}</strong> and a copy sent to the Shop Owner. Cancelling within 2 days of confirmation automatically deducts <strong>10% (₱${tenPercent})</strong> as a holding fee.
       </div>
       <div class="action-btn-row">
         <button type="button" class="button button-small" onclick="openInvoiceModal('${order.id}')">🧾 View / Print Official Invoice Receipt (${order.invoiceNo})</button>
@@ -691,22 +792,16 @@ function renderOwnerDashboard() {
   updateOwnerBadge();
 
   if (!isOwnerAuthenticated) {
-    listEl.innerHTML = `<p class="muted">🔒 Owner Admin Panel is locked. Click the tab above and enter Owner PIN to view and accept requests.</p>`;
+    listEl.innerHTML = `<p class="muted">🔒 Owner Admin Panel is locked.</p>`;
     return;
   }
-
-  const lockBar = `
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
-      <button type="button" class="button button-small button-outline" onclick="lockOwnerPanel()">🔒 Lock Owner Panel</button>
-    </div>
-  `;
 
   if (!orders.length) {
-    listEl.innerHTML = lockBar + `<p class="muted">No service requests yet. Submit a repair request above to test the owner approval workflow.</p>`;
+    listEl.innerHTML = `<p class="muted" style="margin-top:16px;">No service requests yet. Submit a repair request above to test the owner approval workflow.</p>`;
     return;
   }
 
-  listEl.innerHTML = lockBar + orders.map(order => `
+  listEl.innerHTML = orders.map(order => `
     <div class="owner-order-item">
       <div class="owner-order-info">
         <span class="order-ref-badge">${order.id} • ${new Date(order.createdAt).toLocaleString()}</span>
@@ -718,16 +813,16 @@ function renderOwnerDashboard() {
       <div class="owner-order-actions">
         ${order.status === 'PENDING_OWNER_APPROVAL' ? `
           <div style="display:flex;flex-direction:column;gap:4px;">
-            <label style="font-size:10px;color:var(--muted);">Final Quote (₱)</label>
+            <label style="font-size:10px;color:var(--muted);">Approved Amount (₱)</label>
             <input type="number" id="owner-price-${order.id}" value="${order.price}" style="width:110px;min-height:38px;padding:6px 10px;font-size:13px;">
           </div>
-          <button type="button" class="button button-small" onclick="handleOwnerAction('${order.id}', 'ACCEPT')">✓ Accept Repair</button>
-          <button type="button" class="button button-small button-danger" onclick="handleOwnerAction('${order.id}', 'CANCEL')">✕ Cancel Service</button>
+          <button type="button" class="button button-small" onclick="handleOwnerAction('${order.id}', 'ACCEPT')">✓ Approve &amp; Email Payment Link</button>
+          <button type="button" class="button button-small button-danger" onclick="handleOwnerAction('${order.id}', 'CANCEL')">✕ Decline Request</button>
         ` : ''}
         ${order.invoiceNo ? `
           <button type="button" class="button button-small button-outline" onclick="openInvoiceModal('${order.id}')">🧾 Owner Copy of Invoice</button>
         ` : ''}
-        <button type="button" class="button button-small button-outline" onclick="viewOrderAsCustomer('${order.id}')">👁️ Open in Customer View</button>
+        <button type="button" class="button button-small button-outline" onclick="viewOrderAsCustomer('${order.id}')">👁️ Customer View</button>
       </div>
     </div>
   `).join('');
@@ -756,19 +851,20 @@ window.openInvoiceModal = function(orderId) {
   const body = document.getElementById('invoice-body-details');
 
   const isDeducted = order.status === 'CANCELLED_10_PERCENT_DEDUCTED';
-  stamp.textContent = isDeducted ? 'CANCELLED (10% FEE DEDUCTED)' : 'PAID & CONFIRMED';
+  stamp.textContent = isDeducted ? 'CANCELLED (10% FEE DEDUCTED)' : 'OFFICIAL PAID RECEIPT';
   stamp.classList.toggle('stamp-cancelled', isDeducted);
 
   body.innerHTML = `
-    <div class="invoice-row"><span>Invoice Number</span><strong>${order.invoiceNo || 'PENDING'}</strong></div>
+    <div class="invoice-row"><span>Official Invoice Number</span><strong>${order.invoiceNo || 'PENDING'}</strong></div>
     <div class="invoice-row"><span>Order Reference ID</span><strong>${order.id}</strong></div>
-    <div class="invoice-row"><span>Date Issued</span><strong>${new Date(order.paidAt || Date.now()).toLocaleString()}</strong></div>
+    <div class="invoice-row"><span>Date &amp; Time Issued</span><strong>${new Date(order.paidAt || Date.now()).toLocaleString()}</strong></div>
     <div class="invoice-row"><span>Customer Name</span><strong>${order.customerName}</strong></div>
-    <div class="invoice-row"><span>Customer Email</span><strong>${order.customerEmail}</strong></div>
-    <div class="invoice-row"><span>Device &amp; Service</span><strong>${order.device} — ${order.serviceName}</strong></div>
+    <div class="invoice-row"><span>Customer Gmail</span><strong>${order.customerEmail}</strong></div>
+    <div class="invoice-row"><span>Respected Repair Service</span><strong>${order.serviceName}</strong></div>
+    <div class="invoice-row"><span>Device / Project Model</span><strong>${order.device} (${order.preference})</strong></div>
     <div class="invoice-row"><span>Online Payment Method</span><strong>${order.paymentMethod || 'Online Portal'}</strong></div>
     <div class="invoice-row"><span>Payment Reference No.</span><strong>${order.paymentRef || 'N/A'}</strong></div>
-    <div class="invoice-row total-row"><span>Total Service Amount Paid</span><span>₱${order.price.toFixed(2)}</span></div>
+    <div class="invoice-row total-row"><span>Total Repair Amount Paid</span><span>₱${order.price.toFixed(2)}</span></div>
     ${isDeducted ? `
       <div class="invoice-row deduction-row"><span>Less: Automated 10% Cancellation Holding Fee (Within 2 Days)</span><span>-₱${order.holdingFeeDeducted.toFixed(2)}</span></div>
       <div class="invoice-row refund-row"><span>Net Automated Refund to Customer</span><span>₱${order.netRefundAmount.toFixed(2)}</span></div>
@@ -785,11 +881,9 @@ document.getElementById('print-invoice-btn').addEventListener('click', () => {
   window.print();
 });
 
-/* ================= PORTAL TABS & ORDER LOOKUP ================= */
+/* ================= PORTAL TABS & CLEAN URL LOOKUP ================= */
 window.switchPortalTab = function(role) {
-  if (role === 'owner' && !verifyOwnerAccess()) {
-    return;
-  }
+  if (role === 'owner' && !isOwnerAuthenticated) return;
   const isCust = role === 'customer';
   document.getElementById('tab-customer').classList.toggle('is-active', isCust);
   document.getElementById('tab-owner').classList.toggle('is-active', !isCust);
@@ -799,7 +893,7 @@ window.switchPortalTab = function(role) {
 
 document.getElementById('tab-customer').addEventListener('click', () => switchPortalTab('customer'));
 document.getElementById('tab-owner').addEventListener('click', () => {
-  if (!verifyOwnerAccess()) return;
+  if (!isOwnerAuthenticated) return;
   switchPortalTab('owner');
   renderOwnerDashboard();
 });
@@ -811,41 +905,41 @@ document.getElementById('lookup-btn').addEventListener('click', () => {
   renderCustomerOrder(val);
 });
 
-/* Handle 1-Click Gmail Links */
-function handleIncomingEmailActionLinks() {
+/* Restores order cleanly if opened from a Gmail link on another device */
+function handleIncomingEmailLinks() {
   const params = new URLSearchParams(window.location.search);
   const orderId = params.get('order');
-  const action = params.get('action');
-  const encodedData = params.get('data');
-
   if (!orderId) return;
 
   const orders = getOrders();
   let existing = orders.find(o => o.id === orderId);
 
-  if (!existing && encodedData) {
-    try {
-      existing = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(encodedData)))));
-      orders.unshift(existing);
-      saveOrders(orders);
-    } catch (e) {
-      console.warn('Could not decode order URL payload:', e);
-    }
+  if (!existing && params.get('name')) {
+    existing = {
+      id: orderId,
+      customerName: params.get('name') || 'Customer',
+      customerEmail: params.get('email') || '',
+      mobile: 'N/A',
+      serviceName: params.get('service') || 'Repair Service',
+      device: params.get('device') || 'Device',
+      issue: 'Loaded from email link',
+      preference: 'mail-in',
+      price: parseFloat(params.get('price') || '1500'),
+      status: params.get('status') || 'PENDING_OWNER_APPROVAL',
+      createdAt: Date.now(),
+      acceptedAt: Date.now(),
+      paidAt: null,
+      invoiceNo: null,
+      holdingFeeDeducted: 0,
+      netRefundAmount: 0
+    };
+    orders.unshift(existing);
+    saveOrders(orders);
   }
 
-  if (!existing) return;
-  activeOrderId = existing.id;
-  window.history.replaceState({}, document.title, window.location.pathname + '#order-portal');
-
-  if (action === 'owner-accept' && existing.status === 'PENDING_OWNER_APPROVAL') {
-    setTimeout(() => handleOwnerAction(existing.id, 'ACCEPT'), 300);
-  } else if (action === 'owner-cancel' && existing.status === 'PENDING_OWNER_APPROVAL') {
-    setTimeout(() => handleOwnerAction(existing.id, 'CANCEL'), 300);
-  } else if (action === 'customer-cancel') {
-    switchPortalTab('customer');
-    renderCustomerOrder(existing.id);
-    setTimeout(() => handleCustomerCancel(existing.id), 300);
-  } else {
+  if (existing) {
+    activeOrderId = existing.id;
+    window.history.replaceState({}, document.title, window.location.pathname + '#order-portal');
     switchPortalTab('customer');
     renderCustomerOrder(existing.id);
   }
@@ -855,6 +949,7 @@ document.addEventListener('keydown', event => {
   if (event.key !== 'Escape') return;
   const invModal = document.getElementById('invoice-modal');
   if (invModal && !invModal.hidden) invModal.hidden = true;
+  else if (ownerAuthModal && !ownerAuthModal.hidden) ownerAuthModal.hidden = true;
   else if (chatPanel && !chatPanel.hidden) closeChat(true);
   else if (menu && menu.getAttribute('aria-expanded') === 'true') closeMenu(true);
 });
@@ -865,14 +960,8 @@ document.addEventListener('click', event => {
   }
 });
 
-// Update Owner Tab label to show Lock Icon
-const ownerTabBtn = document.getElementById('tab-owner');
-if (ownerTabBtn) {
-  ownerTabBtn.innerHTML = '🔒 Owner Admin Panel <span id="owner-badge-count" class="count-pill">0</span>';
-}
-
 // Initialize Portal on Page Load
 renderCustomerOrder();
 renderOwnerDashboard();
 renderEmailLogs();
-handleIncomingEmailActionLinks();
+handleIncomingEmailLinks();
