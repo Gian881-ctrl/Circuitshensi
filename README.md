@@ -17,4 +17,4 @@ Reply to the customer by email to confirm the diagnosis, price, turnaround, hand
 - Update the embedded video ID in `work-video.js` and the direct video link in `index.html` together.
 - The social preview is `assets/social-preview.jpg`. If the public domain changes, update the absolute canonical, social, and structured-data URLs in the HTML.
 
-The original photos and Manrope font remain in `assets/` alongside the optimized WebP and WOFF2 files used on the site. The font license is in `assets/OFL.txt`.
+The original photos and Manrope font remain in `assets/` alongside the optimized WebP and WOFF2 files used on the site. The phone hero and keyboard service illustration are AI-generated product images. The recent-work section links to the shop’s own video. The font license is in `assets/OFL.txt`.
