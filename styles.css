@@ -308,6 +308,104 @@ legend{padding:0}
   .hero-actions .button,.hero-actions .text-link{font-size:.875rem}
   .hero-actions .button{padding-inline:.85rem}
 }
+@media screen and (prefers-reduced-motion:no-preference){
+  :root{--ease-settle:cubic-bezier(.22,.76,.22,1)}
+
+  .button,.chat-toggle,.menu-toggle{
+    transition:background-color 160ms,color 160ms,translate 180ms var(--ease-settle);
+  }
+  .menu-toggle span,.faq-list summary::after{transition:transform 220ms var(--ease-settle)}
+  .menu-toggle[aria-expanded=true] span{transform:rotate(45deg)}
+
+  .chat-panel:not([hidden]){animation:contact-open 200ms var(--ease-settle)}
+  @keyframes contact-open{
+    from{opacity:.5;transform:translateY(8px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+  @media(max-width:62rem){
+    #navigation.is-open{animation:menu-open 180ms var(--ease-settle)}
+    @keyframes menu-open{
+      from{opacity:.6;transform:translateY(-6px)}
+      to{opacity:1;transform:translateY(0)}
+    }
+  }
+
+  @supports selector(details::details-content) and (interpolate-size:allow-keywords) and (transition-behavior:allow-discrete){
+    .faq-list details::details-content{
+      interpolate-size:allow-keywords;
+      block-size:0;
+      opacity:0;
+      overflow:clip;
+      overflow-clip-margin:6px;
+      transition:block-size 240ms var(--ease-settle),opacity 160ms ease,content-visibility 240ms allow-discrete;
+    }
+    .faq-list details[open]::details-content{block-size:auto;opacity:1}
+  }
+
+  @media(hover:hover) and (pointer:fine){
+    .button:not(:disabled):hover,.chat-toggle:hover{translate:0 -1px}
+    .button:not(:disabled):active,.chat-toggle:active,.menu-toggle:active{translate:0 1px}
+    .service-photo img{transition:transform 480ms var(--ease-settle)}
+    .service-card:hover .service-photo img,.service-card:focus-within .service-photo img{transform:scale(1.035)}
+  }
+
+  @media(min-width:62.001rem) and (hover:hover) and (pointer:fine){
+    #navigation>a:not(.button){position:relative;text-decoration:none}
+    #navigation>a:not(.button)::after{
+      content:"";
+      position:absolute;
+      inset:auto 0 .38rem;
+      height:2px;
+      background:var(--accent);
+      transform:scaleX(0);
+      transform-origin:left;
+      transition:transform 190ms var(--ease-settle);
+    }
+    #navigation>a:not(.button):is(:hover,:focus-visible)::after{transform:scaleX(1)}
+  }
+
+  /* Keep the masthead in place as visitors move between the site and its policies. */
+  @view-transition{navigation:auto}
+  .site-header{view-transition-name:masthead}
+  ::view-transition-group(*){animation-duration:220ms}
+
+  .hero-copy > *{animation:hero-intro 540ms var(--ease-settle) backwards}
+  .hero-copy h1{animation-delay:45ms}
+  .hero-description{animation-delay:90ms}
+  .hero-actions{animation-delay:135ms}
+  .hero-actions:focus-within{animation:none}
+  .bench-art{animation:product-intro 720ms var(--ease-settle) backwards}
+  @keyframes hero-intro{
+    from{opacity:.72;transform:translateY(13px)}
+    to{opacity:1;transform:none}
+  }
+  @keyframes product-intro{
+    from{opacity:.92;transform:translateY(18px) scale(.985)}
+    to{opacity:1;transform:none}
+  }
+
+  /* The image moves inside its reserved frame with the visitor's own scroll. */
+  @supports (animation-timeline:view()) and (animation-range:exit-crossing 0% exit-crossing 100%){
+    .hero-showcase{view-timeline:--product-exit block;--product-scale:1.075}
+    .hero-photo{
+      animation:product-detail auto linear both;
+      animation-timeline:--product-exit;
+      animation-range:exit-crossing 0% exit-crossing 85%;
+    }
+    @media(max-width:43rem){.hero-showcase{--product-scale:1.035}}
+    @keyframes product-detail{from{transform:scale(1)}to{transform:scale(var(--product-scale))}}
+  }
+
+  .is-arriving{animation:section-arrive 540ms var(--ease-settle) backwards}
+  .is-arriving:focus-within{animation:none}
+  @media(min-width:36.001rem){
+    .service-card.is-arriving:nth-child(even){animation-delay:60ms}
+  }
+  @keyframes section-arrive{
+    from{opacity:.72;transform:translateY(18px)}
+    to{opacity:1;transform:none}
+  }
+}
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}

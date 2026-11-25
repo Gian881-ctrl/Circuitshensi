@@ -399,3 +399,32 @@ function initInquiry() {
 }
 
 if (form) initInquiry();
+
+// Only animate items that approach from below. Direct links and restored pages
+// show the content already in view immediately.
+if ('IntersectionObserver' in window) {
+  const motionAllowed = matchMedia('(prefers-reduced-motion: no-preference)');
+  const approaching = new WeakSet();
+  const arrivals = new IntersectionObserver(entries => {
+    for (const entry of entries) {
+      const item = entry.target;
+      if (!entry.isIntersecting && entry.boundingClientRect.top > 0) {
+        approaching.add(item);
+        continue;
+      }
+      arrivals.unobserve(item);
+      if (entry.isIntersecting && approaching.has(item) && motionAllowed.matches && !item.matches(':focus-within')) {
+        item.classList.add('is-arriving');
+      }
+    }
+  }, { rootMargin: '0px 0px 8px 0px' });
+
+  document.querySelectorAll('.section-heading, .service-card, .local-path, .portfolio-grid > article')
+    .forEach(item => arrivals.observe(item));
+
+  function finishArrival(event) {
+    if (event.animationName === 'section-arrive') event.target.classList.remove('is-arriving');
+  }
+  document.addEventListener('animationend', finishArrival);
+  document.addEventListener('animationcancel', finishArrival);
+}
