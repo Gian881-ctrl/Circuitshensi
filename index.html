@@ -26,7 +26,7 @@
   <meta name="twitter:image:alt" content="Circuit Senshi Tech Solutions, phone and board repair in Dagupan City">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="./assets/manrope.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./styles.css?v=3e699a28">
+  <link rel="stylesheet" href="./styles.css?v=ff121af1">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -44,7 +44,7 @@
     "sameAs": ["https://www.tiktok.com/@circuit1012", "https://www.youtube.com/@giancastillo5302", "https://github.com/Gian881-ctrl"]
   }
   </script>
-  <script src="./app.js?v=a84426ed" defer></script>
+  <script src="./app.js?v=fdbaaead" defer></script>
   <script src="./work-video.js" defer></script>
   <script src="./motion.js?v=7cc31aed" defer></script>
 </head>
@@ -131,14 +131,20 @@
       <div class="section wrap">
         <div class="section-heading">
           <div><p class="eyebrow">Service &amp; quote estimator</p><h2 id="estimator-heading">What will it take?</h2></div>
-          <p>Choose the closest match to your symptoms or project. Get a planning range, an estimated bench window, and a list of the work behind the figure.</p>
+          <p>Choose what happens when you use the device, or the PCB work you need. Each option explains what to look for. Choose “Other — please specify” to describe a different issue in your own words.</p>
         </div>
         <div id="estimate-tool" class="estimate-layout" hidden>
           <div class="estimate-controls">
             <h3>Build your estimate</h3>
             <div class="field"><label for="estimate-category">Service category</label><select id="estimate-category"></select></div>
-            <div class="field"><label for="estimate-tier">Specific issue or project tier</label><select id="estimate-tier"></select></div>
-            <p>Choose “Bench diagnostic” if several symptoms overlap or you’re unsure which part is at fault.</p>
+            <div class="field"><label for="estimate-tier">Which issue or project matches yours?</label><select id="estimate-tier" aria-describedby="estimate-context"></select></div>
+            <p id="estimate-context"></p>
+            <div class="field estimate-other-field" id="estimate-other-field" hidden>
+              <label for="estimate-other">Describe your issue or project</label>
+              <p id="estimate-other-help">Up to 600 characters. Leave out passwords and unlock codes.</p>
+              <textarea id="estimate-other" rows="3" maxlength="600" aria-describedby="estimate-other-help estimate-other-error" disabled></textarea>
+              <span class="error" id="estimate-other-error"></span>
+            </div>
           </div>
           <div class="estimate-result">
             <h3 id="estimate-title">Your estimate</h3>
@@ -149,7 +155,7 @@
             <h4>What’s included</h4>
             <ul class="estimate-includes" id="estimate-includes"></ul>
             <p id="estimate-terms"></p>
-            <p>Save this planning estimate with your inquiry. The shop confirms the final price and schedule in writing before you authorize work.</p>
+            <p>The shop confirms the final price and schedule in writing before you authorize work.</p>
             <a class="button" id="lock-estimate" href="#repair-form">Lock In This Estimate</a>
             <p class="sr-only" id="estimate-announcement" role="status"></p>
           </div>

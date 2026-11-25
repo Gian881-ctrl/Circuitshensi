@@ -253,6 +253,11 @@ legend{padding:0}
 .estimate-controls h3,.estimate-result h3{font-size:clamp(1.55rem,2.7vw,2.35rem);margin-bottom:1.15rem}
 .estimate-controls>p,.estimate-result>p{font-size:.95rem;color:var(--muted);margin:.45rem 0 1.1rem}
 .estimate-controls .field{margin:1.2rem 0 0}
+#estimate-context{margin:.6rem 0 0;padding:.65rem .85rem;border-inline-start:2px solid var(--accent);background:var(--panel);color:var(--ink);font-size:.9rem;line-height:1.5;overflow-wrap:anywhere}
+.estimate-other-field textarea{max-width:100%;margin-top:.65rem;overflow-wrap:anywhere}
+#estimate-other-help,#estimate-other-error{margin-top:.4rem;font-size:.875rem;line-height:1.45}
+#estimate-other-help{color:var(--muted)}
+#estimate-other-error:not(:empty){color:var(--error);font-weight:650}
 .estimate-result .eyebrow{color:var(--muted)}
 .estimate-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.35rem 0;padding:1.1rem 0;border-block:1px solid var(--line)}
 .estimate-facts dt{color:var(--muted);font-size:.875rem}
@@ -264,7 +269,7 @@ legend{padding:0}
 .estimate-section :focus-visible{outline-color:#0071e3}
 .estimate-section a:not(.button){color:inherit;text-decoration:underline}
 .booking-estimate{padding:1.05rem 1.15rem;background:#0071e30b;border:1px solid #0071e34d;border-radius:14px;margin:1rem 0}
-.booking-estimate p{color:var(--muted);line-height:1.5;margin:.25rem 0}
+.booking-estimate p{color:var(--muted);line-height:1.5;margin:.25rem 0;overflow-wrap:anywhere}
 
 .comparison-wrap{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg)}
 .comparison-table{width:100%;border-spacing:0;table-layout:fixed;text-align:left;line-height:1.5}
