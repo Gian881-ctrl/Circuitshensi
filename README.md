@@ -12,7 +12,9 @@ Reply to the customer by email to confirm the diagnosis, price, turnaround, hand
 
 - Edit the service cards, matching form options, shop hours, FAQ, and portfolio in `index.html`. The form option’s `data-key` matches the card’s `data-service`. A missing `data-price` means the shop quotes after assessment.
 - Update warranty, cancellation, and privacy details in `policies.html`. Keep the warranty summary and footer hours consistent on both pages.
-- Add a time range to a service card when the bench can support it. Phone, keyboard, and mouse repairs currently use individual quotes. Add case studies or customer quotes in the marked portfolio section once approved for publication.
+- The estimator's issue tiers, planning ranges, and bench windows are in `estimateTiers` in `app.js`. Update the matching card, trust strip, and FAQ in `index.html` when prices or times change. The ₱300 diagnostic, board repair range and PCB starting/hourly rates come from the shop's published pricing. The other ranges and one-shop-day reply target are planning estimates.
+- Locking an estimate attaches the selected issue, price, timing, and scope to the request. The customer can change or remove it before sending. A written quote and authorization follow separately.
+- Replace each marked walkthrough in `#portfolio` with the approved job photos, challenge, work, and verified result. Replace the samples in `#assurance` with permissioned customer feedback and display names. Update the visible preview labels when the underlying content is genuine.
 - Keep the active EmailJS service, template, and public key in `app.js`. The Formspree endpoint is the form action in `index.html`. To change the shop email, update both pages and `app.js`.
 - Update the embedded video ID in `work-video.js` and the direct video link in `index.html` together.
 - The social preview is `assets/social-preview.jpg`. If the public domain changes, update the absolute canonical, social, and structured-data URLs in the HTML.

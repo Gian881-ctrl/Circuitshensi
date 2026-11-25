@@ -91,7 +91,7 @@ function setupArrivals() {
     }
   }, {rootMargin:'0px 0px 8px 0px'});
 
-  document.querySelectorAll('.highlight-card, .section-heading, .service-card, .steps, .local-path, .portfolio-grid > article, .inquiry-copy')
+  document.querySelectorAll('.highlight-card, .section-heading, .service-card, .steps, .local-path, .case-card, .pillar-grid > article, .inquiry-copy')
     .forEach(item => arrivals.observe(item));
   function finishArrival(event) {
     if (event.animationName === 'section-arrive') event.target.classList.remove('is-arriving');

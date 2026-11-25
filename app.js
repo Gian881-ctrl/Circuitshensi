@@ -245,6 +245,7 @@ async function sendFormspree(inquiry) {
         issue: inquiry.issue,
         preference: inquiry.preference,
         amount: inquiry.amount,
+        estimateSummary: inquiry.estimateSummary,
         details: inquiry.details,
         portalLink: referenceURL(inquiry.id)
       })
@@ -255,6 +256,115 @@ async function sendFormspree(inquiry) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+const estimateTiers = {
+  phone: [
+    {
+      id: 'charging-port', label: 'Loose port or unreliable charging', price: '₱800–₱1,800', time: '1–3 working days',
+      includes: ['Check how the charger seats and whether the connection drops.', 'Inspect the port and nearby connections to identify the repair.', 'Verify charging on the repaired device before handover.']
+    },
+    {
+      id: 'no-power', label: 'No power or repeated restarts', price: '₱1,200–₱2,500+', time: '2–5 working days',
+      includes: ['Check the reported startup or restart behavior.', 'Trace the power fault and identify any parts needed.', 'Retest startup and the original symptom after approved work.']
+    }
+  ],
+  board: [
+    {
+      id: 'port-pad', label: 'Damaged port or lifted solder pad', price: '₱800–₱1,600', time: '2–4 working days',
+      includes: ['Inspect the connector, anchor points, and attached pads.', 'Identify the joint or pad that needs micro-soldering.', 'Check continuity and the connector function after repair.']
+    },
+    {
+      id: 'trace-smd', label: 'Broken trace or surface-mount fault', price: '₱1,200–₱2,500+', time: '3–7 working days',
+      includes: ['Trace the affected circuit and inspect nearby components.', 'Quote the trace restoration or component work identified.', 'Check the repaired path and retest the reported fault.']
+    }
+  ],
+  peripherals: [
+    {
+      id: 'keyboard-switch', label: 'Keyboard misses or repeats a key', price: '₱350–₱900', time: '1–3 working days',
+      includes: ['Identify which key misses, repeats, or sticks.', 'Inspect the switch, socket, and associated solder joints.', 'Repeat the affected keystrokes to check the repair.']
+    },
+    {
+      id: 'mouse-click', label: 'Mouse double-clicks or skips scroll steps', price: '₱350–₱750', time: '1–2 working days',
+      includes: ['Reproduce the double-click or skipped scroll input.', 'Inspect the affected switch or wheel encoder.', 'Retest repeated clicks or scrolling after the repair.']
+    },
+    {
+      id: 'cable', label: 'Intermittent cable or connection', price: '₱400–₱1,000', time: '1–3 working days',
+      includes: ['Check where the device loses its connection.', 'Inspect the cable, plug, and internal connector.', 'Verify a stable connection during normal movement.']
+    }
+  ],
+  pcb: [
+    {
+      id: 'layout-routing', label: 'PCB layout and routing', price: '₱1,500–₱3,000', time: '3–7 working days',
+      includes: ['Review the schematic, board outline, and connector positions.', 'Agree on the routing scope and required files.', 'Check the layout against the agreed constraints before handoff.']
+    },
+    {
+      id: 'prototype-assembly', label: 'Prototype board assembly', price: '₱2,000–₱5,000+', time: '5–10 working days',
+      includes: ['Check the bare board and parts list for assembly readiness.', 'Assemble the components in the agreed scope.', 'Inspect the joints and run the checks agreed for the prototype.']
+    }
+  ],
+  diagnostic: [
+    {
+      id: 'power-assessment', label: 'Phone or board fault assessment', price: '₱300', time: '1–2 working days',
+      includes: ['Document the model and symptoms at intake.', 'Inspect the affected area and identify the next diagnostic or repair step.', 'Explain the findings and quote any proposed repair.']
+    },
+    {
+      id: 'input-assessment', label: 'Keyboard or mouse fault assessment', price: '₱300', time: '1–2 working days',
+      includes: ['Record the affected keys, buttons, wheel, or connection.', 'Check the inputs against the symptoms you report.', 'Explain the findings and quote any proposed repair.']
+    }
+  ]
+};
+
+function setupEstimator(onLock) {
+  const tool = document.querySelector('#estimate-tool');
+  if (!tool) return;
+  const category = tool.querySelector('#estimate-category');
+  const tier = tool.querySelector('#estimate-tier');
+  const inclusions = tool.querySelector('#estimate-includes');
+  const announcement = tool.querySelector('#estimate-announcement');
+
+  for (const option of form.elements.servicePackage.options) {
+    if (estimateTiers[option.dataset.key]) category.add(new Option(option.value, option.dataset.key));
+  }
+
+  function currentEstimate() {
+    const key = category.value;
+    let terms = 'Allow this bench time after approval and once parts are available. Courier transit is separate.';
+    if (key === 'pcb') {
+      terms = 'The bench window starts after approval and receipt of the required files, boards, and parts. Fabrication and delivery are separate. Separately scoped work is ₱500 per hour.';
+    } else if (key === 'diagnostic') {
+      terms = 'Allow this assessment time from receipt. The ₱300 bench fee is credited toward the final repair bill if you proceed.';
+    }
+    return {category: key, ...estimateTiers[key][tier.selectedIndex], terms};
+  }
+
+  function showEstimate(announce) {
+    const estimate = currentEstimate();
+    tool.querySelector('#estimate-title').textContent = estimate.label;
+    tool.querySelector('#estimate-price').textContent = estimate.price;
+    tool.querySelector('#estimate-time').textContent = estimate.time;
+    tool.querySelector('#estimate-terms').textContent = estimate.terms;
+    inclusions.replaceChildren(...estimate.includes.map(text => {
+      const li = document.createElement('li');
+      li.textContent = text;
+      return li;
+    }));
+    if (announce) announcement.textContent = estimate.label + '. ' + estimate.price + '. ' + estimate.time + '.';
+  }
+
+  function showTiers(announce) {
+    tier.replaceChildren(...estimateTiers[category.value].map(item => new Option(item.label, item.id)));
+    showEstimate(announce);
+  }
+
+  category.addEventListener('change', () => showTiers(true));
+  tier.addEventListener('change', () => showEstimate(true));
+  tool.querySelector('#lock-estimate').addEventListener('click', event => {
+    if (!onLock(currentEstimate())) event.preventDefault();
+  });
+  showTiers(false);
+  tool.hidden = false;
+  document.querySelector('#estimate-fallback').hidden = true;
 }
 
 function initInquiry() {
@@ -274,6 +384,39 @@ function initInquiry() {
   };
   let sending = false;
   let draftReference = '';
+  let lockedEstimate = null;
+  const estimatePanel = document.querySelector('#booking-estimate');
+
+  function clearEstimate() {
+    lockedEstimate = null;
+    fields.estimateSummary.value = '';
+    estimatePanel.hidden = true;
+  }
+
+  function selectService(key) {
+    const option = Array.from(fields.servicePackage.options).find(item => item.dataset.key === key);
+    if (!option) return false;
+    fields.servicePackage.value = option.value;
+    validate(fields.servicePackage);
+    return true;
+  }
+
+  setupEstimator(estimate => {
+    if (sending || !selectService(estimate.category)) return false;
+    lockedEstimate = estimate;
+    const summary = estimate.label + ' · ' + estimate.price + ' · ' + estimate.time;
+    fields.estimateSummary.value = ['Planning estimate: ' + summary, estimate.terms, 'Included: ' + estimate.includes.join(' ')].join('\n');
+    document.querySelector('#booking-estimate-summary').textContent = summary;
+    estimatePanel.hidden = false;
+    fields.customerName.focus({preventScroll:true});
+    return true;
+  });
+  document.querySelector('#remove-estimate').addEventListener('click', () => {
+    clearEstimate();
+    fields.servicePackage.focus();
+  });
+  fields.servicePackage.addEventListener('change', clearEstimate);
+  form.addEventListener('reset', clearEstimate);
 
   function validate(field) {
     const value = field.value.trim();
@@ -303,11 +446,8 @@ function initInquiry() {
     link.addEventListener('click', () => {
       if (sending) return;
       if (link.dataset.service) {
-        const option = Array.from(fields.servicePackage.options).find(item => item.dataset.key === link.dataset.service);
-        if (option) {
-          fields.servicePackage.value = option.value;
-          validate(fields.servicePackage);
-        }
+        clearEstimate();
+        selectService(link.dataset.service);
       }
       if (link.dataset.preference) {
         fields.preference.value = link.dataset.preference;
@@ -327,6 +467,42 @@ function initInquiry() {
     spinner.hidden = !value;
   }
 
+  function currentInquiry() {
+    const service = fields.servicePackage.selectedOptions[0];
+    if (lockedEstimate && lockedEstimate.category !== service.dataset.key) clearEstimate();
+    const inquiry = {
+      id: draftReference,
+      createdAt: Date.now(),
+      customerName: fields.customerName.value.trim(),
+      customerEmail: fields.customerEmail.value.trim(),
+      mobile: fields.mobile.value.trim(),
+      serviceName: service.value,
+      device: fields.device.value.trim(),
+      issue: fields.issue.value.trim(),
+      estimateSummary: lockedEstimate ? fields.estimateSummary.value : '',
+      preference: fields.preference.value,
+      amount: service.dataset.price
+        ? (service.dataset.key === 'diagnostic' ? '' : 'From ') + '₱' + Number(service.dataset.price).toLocaleString('en-PH')
+        : 'Quoted after assessment'
+    };
+    if (lockedEstimate) inquiry.amount = lockedEstimate.price;
+    inquiry.details = [
+      'Reference: ' + inquiry.id,
+      'Customer: ' + inquiry.customerName + ' (' + inquiry.customerEmail + ' / ' + inquiry.mobile + ')',
+      'Service: ' + inquiry.serviceName + ' · ' + inquiry.amount,
+      'Device / project: ' + inquiry.device,
+      'Issue: ' + inquiry.issue,
+      inquiry.estimateSummary,
+      'Handover: ' + (inquiry.preference === 'local' ? 'Local drop-off' : 'Mail-in')
+    ].filter(Boolean).join('\n');
+    return inquiry;
+  }
+
+  // The direct-email fallback should reflect edits made after a failed send.
+  emailLink.addEventListener('click', () => {
+    if (draftReference) emailLink.href = contactLink(draftReference, currentInquiry().details);
+  });
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (sending) return;
@@ -342,29 +518,7 @@ function initInquiry() {
     }
 
     draftReference ||= newReference();
-    const service = fields.servicePackage.selectedOptions[0];
-    const inquiry = {
-      id: draftReference,
-      createdAt: Date.now(),
-      customerName: fields.customerName.value.trim(),
-      customerEmail: fields.customerEmail.value.trim(),
-      mobile: fields.mobile.value.trim(),
-      serviceName: service.value,
-      device: fields.device.value.trim(),
-      issue: fields.issue.value.trim(),
-      preference: fields.preference.value,
-      amount: service.dataset.price
-        ? (service.dataset.key === 'diagnostic' ? '' : 'From ') + '₱' + Number(service.dataset.price).toLocaleString('en-PH')
-        : 'Quoted after assessment'
-    };
-    inquiry.details = [
-      'Reference: ' + inquiry.id,
-      'Customer: ' + inquiry.customerName + ' (' + inquiry.customerEmail + ' / ' + inquiry.mobile + ')',
-      'Service: ' + inquiry.serviceName + ' · ' + inquiry.amount,
-      'Device / project: ' + inquiry.device,
-      'Issue: ' + inquiry.issue,
-      'Handover: ' + (inquiry.preference === 'local' ? 'Local drop-off' : 'Mail-in')
-    ].join('\n');
+    const inquiry = currentInquiry();
 
     setSending(true);
     showStatus(status, 'Sending your inquiry…', 'busy');
