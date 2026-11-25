@@ -26,7 +26,7 @@
   <meta name="twitter:image:alt" content="Circuit Senshi Tech Solutions, phone and board repair in Dagupan City">
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="./assets/manrope.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="./styles.css?v=d5cbf8e3">
+  <link rel="stylesheet" href="./styles.css?v=9bb151b6">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -44,12 +44,15 @@
     "sameAs": ["https://www.tiktok.com/@circuit1012", "https://www.youtube.com/@giancastillo5302", "https://github.com/Gian881-ctrl"]
   }
   </script>
-  <script src="./app.js?v=d0f9ff2f" defer></script>
+  <script src="./app.js?v=6d879f2a" defer></script>
   <script src="./work-video.js" defer></script>
+  <script src="./motion.js?v=853c9d8e" defer></script>
 </head>
 <body id="top">
   <a class="skip-link" href="#main">Skip to content</a>
+  <span class="page-origin" aria-hidden="true"></span>
   <header class="site-header">
+    <span class="scroll-progress" aria-hidden="true"></span>
     <div class="wrap header-inner">
       <a class="brand" href="#top" aria-label="Circuit Senshi home"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M29 8H15L7 16v16h18l8-8V8M16 23v-7h9M16 23h9v-7M2 20h5M20 2v6M33 20h5M20 32v6"/></svg><span>Circuit Senshi<small>TECH SOLUTIONS</small></span></a>
       <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="navigation">Menu <span aria-hidden="true">+</span></button>
@@ -74,40 +77,64 @@
           width="1500" height="577" alt="Opened silver phone beside its display, a logic board, and a precision screwdriver" fetchpriority="high">
       </figure>
     </section>
-    <div class="service-strip"><div class="wrap"><span>At the repair bench</span><span>₱300 diagnostic</span><span>Two-week warranty</span><span>Lifetime support</span></div></div>
+    <dl class="wrap bench-highlights" aria-label="Repair essentials">
+      <div class="highlight-card highlight-fee">
+        <dt>Bench diagnostic</dt>
+        <dd class="highlight-value">₱<span data-count>300</span></dd>
+        <dd class="highlight-detail">Credited toward your final repair bill.</dd>
+        <dd class="highlight-action"><a class="text-link" href="#inquiry" data-service="diagnostic">Book a diagnostic</a></dd>
+      </div>
+      <div class="highlight-card highlight-warranty">
+        <dt>Repair warranty</dt>
+        <dd class="highlight-value"><span data-count>14</span> <small>days</small></dd>
+        <dd class="highlight-detail">Coverage for completed repairs.</dd>
+      </div>
+      <div class="highlight-card">
+        <dt>Aftercare</dt>
+        <dd class="highlight-value">Lifetime</dd>
+        <dd class="highlight-detail">Support for your repair.</dd>
+      </div>
+    </dl>
     <section class="section wrap" id="services" aria-labelledby="services-title">
       <div class="section-heading"><div><p class="eyebrow">Services &amp; pricing</p><h2 id="services-title">What’s on your bench?</h2></div><p>Choose your device or project. We’ll confirm the scope, cost, and turnaround before you book.</p></div>
       <div class="service-grid">
-        <article class="service-card">
+        <article class="service-card service-feature">
           <figure class="service-photo"><img src="./assets/logic-board.webp" width="600" height="399" alt="Close-up of the board inside a mobile device" loading="lazy" decoding="async"></figure>
           <h3>Phone repair</h3><p>Charging issues, power faults, or a phone that won’t start. Send the model and symptoms so we can assess the repair.</p>
-          <div class="price"><strong>By quotation</strong><span>Parts and labor depend on the model</span></div>
-          <p class="service-time"><strong>Turnaround</strong> Estimated after the model and parts check.</p>
+          <div class="service-specs">
+            <div class="price"><strong>By quotation</strong><span>Parts and labor depend on the model</span></div>
+            <p class="service-time"><strong>Turnaround</strong> Estimated after the model and parts check.</p>
+          </div>
           <a class="service-link" href="#inquiry" data-service="phone">Request a phone repair quote</a>
         </article>
         <article class="service-card">
           <figure class="service-photo station-photo"><img src="./assets/hot-air-station.webp" width="335" height="597" alt="Hot-air nozzle and rework station used for component repairs" loading="lazy" decoding="async"></figure>
           <h3>Board repair &amp; micro-soldering</h3><p>Damaged traces, dead ports, and surface-mounted components. We inspect the fault before quoting board-level work.</p>
-          <div class="price"><strong>₱800–₱2,500+</strong><span>Depending on the repair</span></div>
-          <p class="service-time"><strong>Turnaround</strong> Estimated after fault tracing and parts identification.</p>
+          <div class="service-specs">
+            <div class="price"><strong>₱800–₱2,500+</strong><span>Depending on the repair</span></div>
+            <p class="service-time"><strong>Turnaround</strong> Estimated after fault tracing and parts identification.</p>
+          </div>
           <a class="service-link" href="#inquiry" data-service="board">Request a board repair quote</a>
         </article>
         <article class="service-card">
           <figure class="service-photo"><img src="./assets/keyboard-mouse.webp" width="900" height="600" alt="Mechanical keyboard with a keycap lifted and a wireless mouse beside it" loading="lazy" decoding="async"></figure>
           <h3>Keyboard &amp; mouse repair</h3><p>Missed keystrokes, double-clicks, and unreliable connections. Tell us which inputs fail and how often it happens.</p>
-          <div class="price"><strong>By quotation</strong><span>Based on the fault and replacement parts</span></div>
-          <p class="service-time"><strong>Turnaround</strong> Estimated once we identify the affected input.</p>
+          <div class="service-specs">
+            <div class="price"><strong>By quotation</strong><span>Based on the fault and replacement parts</span></div>
+            <p class="service-time"><strong>Turnaround</strong> Estimated once we identify the affected input.</p>
+          </div>
           <a class="service-link" href="#inquiry" data-service="peripherals">Request a peripheral repair quote</a>
         </article>
         <article class="service-card">
           <figure class="service-photo"><img src="./assets/pcb-close-up.webp" width="900" height="675" alt="Copper traces and surface-mounted components on a green circuit board" loading="lazy" decoding="async"></figure>
           <h3>Custom PCB prototyping</h3><p>EDA routing and bare-board assembly for capstones, microcontroller projects, and prototypes. Share your design stage and requirements.</p>
-          <div class="price"><strong>From ₱1,500</strong><span>Or ₱500 per hour for scoped work</span></div>
-          <p class="service-time"><strong>Turnaround</strong> Scheduled from design scope, fabrication, and assembly needs.</p>
+          <div class="service-specs">
+            <div class="price"><strong>From ₱1,500</strong><span>Or ₱500 per hour for scoped work</span></div>
+            <p class="service-time"><strong>Turnaround</strong> Scheduled from design scope, fabrication, and assembly needs.</p>
+          </div>
           <a class="service-link" href="#inquiry" data-service="pcb">Request a prototype quote</a>
         </article>
       </div>
-      <div class="diagnostic"><strong>Bench diagnostic · ₱300</strong><span>We deduct the diagnostic fee from the final repair bill.</span><a class="text-link" href="#inquiry" data-service="diagnostic">Book a diagnostic</a></div>
     </section>
     <section class="process-section" id="process" aria-labelledby="process-title"><div class="wrap section">
       <div class="section-heading"><div><p class="eyebrow">How it works</p><h2 id="process-title">From first fault<br>to final test.</h2></div><p>Choose local drop-off or nationwide mail-in. We’ll agree on the handover before your device travels.</p></div>
